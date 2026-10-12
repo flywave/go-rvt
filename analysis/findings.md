@@ -144,6 +144,8 @@
 
 | R96 | **Ghidra headless 首次运行 + 函数边界问题**：analyzeHeadless 成功导入 TB_Format2023Readers.tx（40MB ELF）并创建项目（/tmp/ghidra_proj/RVT_REA），但自动分析未在 nm 报告的 reader 地址创建函数边界（大型 stripped ELF 常见问题）——nm 地址→Ghidra 函数需二次定位（`getFunctionAt` 返回 null）。后续：需 `-analysisTimeoutPerFile` 提高或手动 `createFunction` 前运行 `analyzeChanges`；Ghidra 项目保留在 /tmp/ghidra_proj | Ghidra headless 运行日志 + 反编译输出 | 观察 | 函数分析精度 |
 
+| R96a | **Ghidra 完整分析完成但函数定位不准**：analyzeHeadless 完整分析（3600s）后，按 nm 地址反编译的函数与目标不匹配（0xf98b8a 反编译出 OdBmRoomBoundingItem transform 而非 GArc reader——大型 stripped ELF 的 nm 地址→Ghidra 函数映射需基于 SymbolTable 搜索而非地址直查）。Ghidra 项目保留，后续需用 SymbolTable API 按 mangled name 搜索 | analyzeHeadless 完整分析 + 反编译验证 | 观察 | 工具精化后可续 |
+
 | R95 | **GArc/GNurbSpline 内联前缀=工具边界（M11 收口）**：富样例 v7 class-103 中 GArc 正交轴命中=0（加各种前缀偏移均 0）——**GNode 基链前缀（GInfo 懒/内联判定）需 per-class writer vtable 运行时解析**，nm/objdump 静态分析不可达。GLine 的紧凑形式（无 GInfo 前缀）为特例而非通则。ScanInlineGArcs/ScanInlineGNurbSplines 扫描器代码保留待 Ghidra 级或动态分析续接。已验证交付不变（GLine 3,874 EndParams 模型 + GArc 3,972 内容锚定 + 全部元素/拓扑/视图层） | 富样例 v7 多偏移扫描 + 正交门探针 | 观察 | Ghidra 12.1.4 已在机（~/tools/ghidra_12.1.4_PUBLIC）——后续可用 analyzeHeadless 反编译 per-class writer vtable |
 
 | R97 | **★Ghidra 反编译 GArc reader 确认（M11 关键产出）**：`CustomDirectReader<2040,GArc>::read` 反编译证实——① reader 通过 `param_2+0x38`（stream context class ptr）判懒/急；② 非空时走 `desc()`→类型检查→`getInternalImpl()`→属性迭代器驱动（注册序=序列化序）；③ **GInfo 经 GNode 基类 OBJREF 延迟**（不入静态体）→ GArc 静态体 = `[EndParams 16B][XDir 24B][YDir 24B][Radius 8B][Center 24B][IsFilled]`；④ 富样例 9 个正交命中=真 GArc 对象（缩放轴椭圆式存储）。Ghidra 项目 /tmp/ghidra_proj/RVT_REA 保留（442K 行反编译，17,927 函数） | Ghidra DecompBySymbol 反编译输出 | 观察→推断 | 缩放轴→Radius 的精确数学关系；多类内联同法扩展 |
