@@ -122,7 +122,7 @@
 
 | ID | 结论 | 证据 | 置信度 | 边界/未知 |
 |---|---|---|---|---|
-| R68 | **class-102 对象存储部分解码（M9 首收）**：存储 = deposit 键控块（头部 `[counter][0xf77f22cb][87=AbsCurveDriver][3107]`）+ 两类条目：**引用** `[i16 class][u32 id≥1]` 与 **内联实例** `[i16 class][u32 0][payload]`。**GLine 内联 payload = 6×f64（Origin 点 + 第二点）**——109 条提取成功（样例 (0,0,0)→(0.336,0.246,0) 英尺），合理性门（有限/幅值/非退化）；`Model.Curves` + `ScanGLines` 落地。GArc(2040) 假设布局（固定偏移 XDir/YDir/Radius/Center）不成立——XDirection/YDirection 为带类前缀 OBJREF，交错布局待专项；GPoint(68 实例) 布局未破 | rvt/geometry.go ScanGLines + TestCurvesRealSamples + GArc 探针 | 观察→推断 | GArc/GPoint/PolyMesh/NurbSpline payload 布局；引用 id ↔ 内联实例的绑定（块框架） |
+| R68 | **class-102 对象存储部分解码（M9 首收）**：存储 = deposit 键控块（头部 `[counter][0xf77f22cb][87=AbsCurveDriver][3107]`）+ 两类条目：**引用** `[i16 class][u32 id≥1]` 与 **内联实例** `[i16 class][u32 0][payload]`。**GLine 内联 payload = 6×f64（Origin 点 + 第二点）**——109 条提取成功（样例 (0,0,0)→(0.336,0.246,0) 英尺），合理性门（有限/幅值/非退化）；`Model.Curves` + `ScanGLines` 落地。GArc(2040) 假设布局（固定偏移 XDir/YDir/Radius/Center）不成立——reader 反汇编证实调用序 = GCurve 基类 → XDirection/YDirection（vcall OBJREF）→ f64 Radius → Center（OBJREF）→ bool IsFilled，payload 前段含嵌套对象前缀 | rvt/geometry.go ScanGLines + TestCurvesRealSamples + GArc reader 反汇编 | 观察→推断 | GArc/GPoint/PolyMesh/NurbSpline payload 布局（需 OBJREF 类 schema）；引用 id ↔ 内联实例的绑定（块框架） |
 
 ## M8 对象模型声明轮
 
