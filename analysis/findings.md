@@ -140,6 +140,8 @@
 
 | R86 | **★G 几何真身定位（M9 目标达成）**：**G 节点几何以快路径内联形式存在于 class-103 树内**——`[i16 class][payload]`（无前缀，R69 点/向量规则的自然延伸）：`ScanInlineGLines` 扫 `[GLine 1798][f64×6]`（Origin+第二点）= **3,920 条线段**（3,916 非退化；样例 (0,0.0417,0)→(0,0,0)=0.5 英寸真实线段；GBrep 同位假阳性基线仅 14）；`[cls][0]` 块（class-102）统一为类型化子引用表（R72/R82 归纳正确）；此前"几何缺失"是搜索位置错误（class-102 而非 class-103）。API：ScanInlineGLines + Model.InlineCurves | rvt/geometry.go ScanInlineGLines + 测试（GBrep 基线对照） | 观察→推断 | 内联对象↔元素归属（经树 counter，M11）；GArc/GNurbSpline 同法内联扫描（预期同构） |
 
+| R86a | **★R86 勘误：内联线提取不可信（撤回）**：复检 7,696 个 `[GLine][f64×6]` 候选——**3,715 个为纯 denormal**（目录 id 对 (id1\|id2<<32) 组成的伪 f64，通过"非零+<1e5"门），其余 3,981 含正常幅值分量但未确认（同一 [GLine][0] 头后既可跟坐标也可跟引用串）。真 GLine 内联布局回到未解状态（与 GArc 同属 **GInfo 前缀问题**）；Model.InlineCurves 标记实验性。已验证几何回到：记录环线 109 + 内容锚定弧 3,972（单位正交+正半径物理门，目录数据无法通过）+ 双 bbox 925 + BRep 493 | TestXVerifyR86 幅值分布检查 | 观察 | GInfo 前缀模型（M11 主线） |
+
 | R87 | **GArc 内联扫描=需基链前缀（边界记录）**：ScanInlineGArcs（固定位置 [GArc][XDir24][YDir24][R8][C24] + 单位正交门 + 有限性门）在双样例 class-103 均为 0——**GArc 体前有 GNode/GCurve 基链变长前缀**（GInfo 对象等），与 GLine 的紧凑形式不同；精确 GArc 扫描需 GInfo 前缀长度模型（M11 剩余）。ScanInlineGArcs 保留（前缀模型就绪后即用） | 双样例扫描（0 命中，NaN 门修正后） | 观察 | GInfo 前缀长度模型 |
 
 | R78 | **绑定精度检验=当前样例不可判定**：bbox 包含测试（曲线端点 ∈ 元素世界 bbox ±1ft）在 2023 样例上无法执行——109 条绑定曲线的所属元素**无一具有 G 树 bbox**（925 个 bbox 属于其他元素），弧检验同样 0/1。精度量化需富样例（曲线元素带 bbox 的真实模型，外部依赖）；当前最近前驱键归属保持启发式置信级 | TestBindingPrecision（0/109 重叠） | 观察 | 富样例后重跑 |
