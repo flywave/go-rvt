@@ -390,11 +390,14 @@ func ScanGArcs(data []byte) []geom.Arc {
 	return out
 }
 
-// KeyedBinding (findings R77): attributes inline geometry objects to
+// KeyedBinding (findings R77/R84): attributes inline geometry objects to
 // elements via the nearest-preceding element-counter key occurrence in the
-// class-102 store (R72: element-counter keyed blocks exist; key vs data
-// contexts are disambiguated by requiring the counter to also exist in the
-// class-101 record counter set).
+// class-102 store. R84 grounded this: DiskManager writes deposits as pure
+// appends with NO block headers, and the block-leading u32 IS the owning
+// object's handle (OdBmDepositId(u64 handle)); for element-owned deposits
+// the handle IS the element id (head blocks 1098306-1098316 match the
+// ElemTable id domain). Keys are restricted to the class-101 record
+// counter set (element ids).
 type KeyedBinding struct {
 	ElementID uint32 `json:"element_id"`
 	Offset    int    `json:"-"`
