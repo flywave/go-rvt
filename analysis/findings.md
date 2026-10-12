@@ -136,6 +136,8 @@
 
 | R73 | **NurbSpline/PolyMesh 差分轮（M9 收口定性）**：① NurbSpline：[2094] 标记 72 处但 `[cls][0]` 精确对象仅 3 个（degree dist 全为 4）——**样例限制**（rac_basic 小样例的样条本就稀少），degree 锚对齐失败因样本不足而非方法；② PolyMesh(2104)：`[cls][0]` 28 个——**头帧破解**：u32 列直方图 `[gstyle=0 ×4][mark 0x20][-1][count 可变(众数 11)][facet 数据…]`（col0-3=零/样式 id、col4=0x20 恒定、col5=-1 哨兵、col6=计数变体、col7+=逐面数据）；Facet 记录尺寸（N-gon 变长）需 FacetedTopology reader 专项 | 列直方图 ×28 样本 | 观察 | Facet 记录布局；NurbSpline 需富样条样例（外部依赖） |
 
+| R82 | **样条 payload 定位边界（M10 探察收口）**：① `[NurbSpline][0]` 块 = **引用列表**（denormal f64 解出小整数——整数数组误读），非坐标对象；② knot 向量内容锚定（≥4 连同值 f64 + 单调尾）在 class-102 全扫仅命中**整数数组假阳性**（重复 u32=2 数组）——class-102 无裸 f64 节点向量；③ 结论：样条坐标 payload 或在未定位的块型中、或样条在 deposit 外另有存储——**需 deposit 写出器级文法（R76 检验链）或样条密集样例**。累计 4 轮探针（R72/R73/R81/R82）已穷尽黑盒方法 | knot 内容锚定扫描（假阳性 4 处全为 u32=2 数组）+ GPoint/GLine/NurbSpline [0] 块对比 | 观察 | 写出器文法（M10 主线）|
+
 | R78 | **绑定精度检验=当前样例不可判定**：bbox 包含测试（曲线端点 ∈ 元素世界 bbox ±1ft）在 2023 样例上无法执行——109 条绑定曲线的所属元素**无一具有 G 树 bbox**（925 个 bbox 属于其他元素），弧检验同样 0/1。精度量化需富样例（曲线元素带 bbox 的真实模型，外部依赖）；当前最近前驱键归属保持启发式置信级 | TestBindingPrecision（0/109 重叠） | 观察 | 富样例后重跑 |
 
 | R79 | **★富样例到手 = 双版本变体齐备**：用户下载 `rac_advanced_sample_project.rvt`（15.3MB，Autodesk-Forge/viewer-navigation.sample GitHub 镜像）= **Revit 2015** 文件——① BFI **rev=10** 布局（R58 预言场景：字段序不同，CentralModelIdentity 处截断，需 rev 分派布局）；② **PartitionStreamVersion 7**（2022/23 为 9）——三子流 101/102/103 同构（6.9/35/26MB）；③ **v7 记录环同框架验证**：class-101 头 `[counter][87][1218][0][0xffff…]` + R45 记录环走读 2,893 条干净（@524KB 首个脏页停止）；④ class-103 v7 头 = GeomStep 型目录（`[counter][c1=193][0x76][2][0x2cb4]` 12B 项） | TestXRichV7 + v7 走读 | 观察 | v7 元素/G 树/GInfo 布局=下一战役（M11） |
