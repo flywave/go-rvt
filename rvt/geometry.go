@@ -603,7 +603,9 @@ func dot3(b []byte) float64 {
 // (R88/R90): [i16 GArc][EndParams 2×f64][XDir 24][YDir 24][Radius 8]
 // [Center 24][IsFilled 1], gated on finite values, non-zero orthogonal
 // axes (scaled axes are valid — ellipse-style) and positive radius, from
-// the class-103 trees, attributed via tree ranges.
+// the class-103 G region, attributed via the nearest-preceding G-tree
+// counter (R91: inter-group objects belong to the neighbouring tree's
+// element neighborhood).
 func ScanInlineGArcs(data []byte, gArc int16, trees []GTree, lookup func(int16) string) []InlineArc {
 	var out []InlineArc
 	for _, tr := range trees {
@@ -710,4 +712,81 @@ func dotMagnitude(b []byte) float64 {
 	y2 := math.Float64frombits(binary.LittleEndian.Uint64(b[32:]))
 	z2 := math.Float64frombits(binary.LittleEndian.Uint64(b[40:]))
 	return math.Sqrt(x1*x1+y1*y1+z1*z1) * math.Sqrt(x2*x2+y2*y2+z2*z2)
+}
+
+// ScanInlineGArcsAttributed scans the whole class-103 G region for GArc
+// instances and attributes each to the nearest-preceding G-tree counter
+// (inter-group objects belong to the neighbouring element's G-tree
+// neighborhood — R91). Trees must be sorted by Offset.
+func ScanInlineGArcsAttributed(data []byte, trees []GTree, gArc int16, lookup func(int16) string) []InlineArc {
+	var out []InlineArc
+	// group start offsets (attraction anchors)
+	starts := make([]int, 0, len(trees))
+	ctrs := make([]uint32, 0, len(trees))
+	for _, tr := range trees {
+		starts = append(starts, tr.Offset)
+		ctrs = append(ctrs, tr.Counter)
+	}
+	for off := 0; off+2+99 <= len(data); off += 2 {
+		if int16(binary.LittleEndian.Uint16(data[off:])) != gArc {
+			continue
+		}
+		base := off + 2
+		ep0, ep1 := f64at2(data, base), f64at2(data, base+8)
+		if !fin2(ep0) || !fin2(ep1) || math.Abs(ep0) > 1e4 || math.Abs(ep1) > 1e4 {
+			continue
+		}
+		x1, x2, x3 := f64at2(data, base+16), f64at2(data, base+24), f64at2(data, base+32)
+		if !fin2(x1) || !fin2(x2) || !fin2(x3) {
+			continue
+		}
+		if math.Abs(x1) < 1e-9 && math.Abs(x2) < 1e-9 && math.Abs(x3) < 1e-9 {
+			continue
+		}
+		y1, y2, y3 := f64at2(data, base+40), f64at2(data, base+48), f64at2(data, base+56)
+		if !fin2(y1) || !fin2(y2) || !fin2(y3) {
+			continue
+		}
+		if math.Abs(x1*y1+x2*y2+x3*y3) > 0.05*vecMag6(data[base:base+48]) {
+			continue
+		}
+		r := f64at2(data, base+64)
+		if !fin2(r) || r <= 1e-6 || r > 1e5 {
+			continue
+		}
+		c1, c2, c3 := f64at2(data, base+72), f64at2(data, base+80), f64at2(data, base+88)
+		if !fin2(c1) || !fin2(c2) || !fin2(c3) {
+			continue
+		}
+		// nearest preceding tree counter
+		i := sort.Search(len(starts), func(i int) bool { return starts[i] > off }) - 1
+		if i < 0 {
+			continue
+		}
+		out = append(out, InlineArc{
+			ElementID: ctrs[i],
+			XDir:      geom.Point3{X: x1, Y: x2, Z: x3},
+			YDir:      geom.Point3{X: y1, Y: y2, Z: y3},
+			Radius:    r,
+			Center:    geom.Point3{X: c1, Y: c2, Z: c3},
+		})
+	}
+	return out
+}
+
+func f64at2(b []byte, off int) float64 {
+	return math.Float64frombits(binary.LittleEndian.Uint64(b[off:]))
+}
+
+func fin2(v float64) bool {
+	return !math.IsNaN(v) && !math.IsInf(v, 0)
+}
+
+func vecMag6(b []byte) float64 {
+	var s float64
+	for k := 0; k+8 <= 48; k += 8 {
+		v := math.Float64frombits(binary.LittleEndian.Uint64(b[k:]))
+		s += v * v
+	}
+	return math.Sqrt(s)
 }
