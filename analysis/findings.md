@@ -68,12 +68,17 @@
 | R46 | **+353 回收落地（R40）**：stale-index 重分类（index 差为 353 倍数且解压成功→StaleIndex，数据入子流）——2023 逻辑流 64.4→**84.7MB**（169 页回收，corrupt 仅剩 2）、2022 53.9→**69.3MB**（137 页，corrupt 0）；unreadable 页不变（97/68，真损坏或魔数丢失） | rvt/partition.go + 双样例测试 | 观察 | 终结器回链扫描（unreadable 区）仍未做 |
 | R47 | **ElemTable↔分区串联键实锤（R35 升级）**：ElemTable 尾部 19B footer 内嵌**分区末条 deposit counter**（2023=1098316，bytes.Contains 验证 ✓）；ElemTable id 域实测 1..1098316（首 id=1，非 R35 所记 26 起——前条目属页内局部序）；8276 条、id/id2 零失配 | m4_real_test 双测试 + footer 字节 | 观察→推断 | id↔counter 全表对拍（待对象信封全解码）；footer [u32 0x8d5] 段语义[?] |
 | R48 | **M4 代码落地**：`rvt/classindex`（两版本 CSV 嵌入+Lookup）、`rvt/objects.go`（记录环 walker+类普查）、`rvt/elemtable.go`（6B 头+28B 记录）、`rvt/partition.go`（stale 回收+walk 集成+ReadPartitionWithLookup）、`rvt/rvt.go`（ElemTable/UnitSystem/ProjectEntries 元数据）；rvtinfo JSON 全暴露；合成+真样例测试全绿 | 本仓库 M4 提交 | 观察 | — |
+| R49 | **★ElementHeader 静态 schema 全量定案（第 5 轮 REA，反汇编生成 reader）**：记录体 = `[i16 1398][i32 count][count×([i64][EID][i16][i32])][ElementId×6][i32 viewRules][i32 abFlags][i16 classDef][i32][i32][CondInt16×2][动态段]`—— setter 序：RegenHistory→Category/Family/OwnerView/DesignOption/UnplacedOwner/Misc 六个 ElementId→RejectedViewRules→AbFlags4Bytes→ClassDefinitionRef→2×CondInt16；**ElementId=裸 i32（null=-1，R38 裸宽收口）**；viewRules=视图类型位掩码（0x81a 系实测）；**快路径嵌套对象无 i16 类前缀**（InitReader 前缀仅慢路径）；CondInt16=[i32 v][i16]，v==0→6B / v≠0→≥8B 分支 | objdump CustomDirectReader<1398>::read@0xe8914a + OdBmCondInt16Reader@0x17474a + ElementId201120260Reader@0xeaf08 + StaticIntegerReader@0x174936（=i32） | 观察 | CondInt16 v≠0 分支精确长度[?] |
+| R50 | **★元素类身份解锁（全量验证）**：ClassDefRef i16 = 元素真实类（经 classindex）——2023 普查 77,213/77,251 解出（GStyleElem=11964、CategoryElem=10500、CurveElem=7066、LinearDimString=6036、FontElem=4788、DBViewType=2775、SketchGrid/SketchPlane…）；2022 58,815/58,819（GStyleElem=11338、CategoryElem=10157…）。API：`ElementClassCensus` + SubStreamInfo.ElementClasses | Go 解码器 77K 记录全量跑通（elements.go + 测试） | 观察 | 4 条类名未解 + 34 条短体（损坏页残留） |
+| R51 | ElementHeader 静态头合计 60–64B；每条记录其后跟**变长动态属性段**（实测 27–165B）——readDynamicProperties→readProperties（readProperty\<readPropertyToken\> 循环+resolveReferences 队列回填） | readProperties@0x1770b8 调用图 | 观察 | 段内格式=R52 |
+| R52 | **动态段 token 解码器=有界未知**：readPropertyToken@0x176468，2.8KB 全内联位级逻辑、零调用（位压缩 token 流）——本轮挂账；已知边界：静态 schema 之外的一切属性走此通道 | 反汇编 | 观察 | 位格式待 Ghidra 级分析或对照解码 |
 
 ## 关键未知（队列）
 
 - U-R1 `62 19 22 05` 帧头字段语义
 - U-R2 Global/* 8B 前缀 u32（0/1/5）语义
 - ~~U-R3 Partitions/N 头与块布局~~ ✅ R23/R26/R27 定案（12B 头+页记录链+签名块+终结器）；N 编号规则仍[?]
-- U-R4 Format{Year} class Index 全表（可脚本从 Classes 模块提取；91/1398/1340/0x821/0x7df 已见实例）
+- U-R4 Format{Year} class Index 全表 ✅ R33（tables/class-index-*.csv 嵌入 rvt/classindex）
+- U-R7 ElementHeader 动态属性段 token 位格式（R52 挂账）；CondInt16 v≠0 分支长度
 - U-R5 协同（workshared）样例
 - U-R6 ~~gzip 链逐成员边界与 65249 分页常数~~ ✅ R25/R26：页成员边界=页记录 ownLen-8；65249=原始页读长上限（含 +8 CRC 记账），非解压尺寸

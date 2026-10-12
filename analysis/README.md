@@ -56,6 +56,13 @@ go-dgn 侧仅保留指引（`go-dgn/analysis/04-rvt/README.md`）。
    =串联键实锤）→ `rvt/partition.go` R40 stale 回收（逻辑流 +20.3/+15.4MB）
    → UnitSystem 尾 + ProjectInformation ZIP 元数据
    - 未竟：per-class 属性级解码（需 per-class reader 元数据）；G* 字段级序列化（下轮战役）
+6. ✅ **M4.5 ElementHeader 属性级解码（已落地，第 5 轮 REA）**：
+   生成 reader 反汇编 → 静态 schema 全量定案（R49：RegenHistory/6×ElementId(i32)/
+   ViewRules 位掩码/AbFlags/ClassDefRef/2×CondInt16）→ `rvt/elements.go`
+   DecodeElementHeader + **元素类身份普查**（ClassDefRef i16→真实类：2023 解出
+   77,213/77,251 条，GStyleElem/CategoryElem/CurveElem…模型构成直接可见，R50）；
+   动态属性段=位压缩 token 流（R52，有界挂账）
+   - 未竟：动态段 token 位格式；G* 字段级序列化（下轮战役主目标）
 
 ## 包结构
 

@@ -160,6 +160,9 @@ type SubStreamInfo struct {
 	WalkBytes    int          `json:"walk_bytes,omitempty"`
 	WalkResyncs  int          `json:"walk_resyncs,omitempty"`
 	Classes      []ClassCount `json:"classes,omitempty"`
+	// ElementClasses histograms the element's real class (ClassDefinitionRef
+	// inside OdBmElementHeader records) — the model composition (R50).
+	ElementClasses []ClassCount `json:"element_classes,omitempty"`
 }
 
 // PartitionInfo is the JSON summary of one Partitions/<n> stream.
@@ -301,7 +304,7 @@ func ReadPartitionWithLookup(name string, stream []byte, lookup func(int16) stri
 	info.MarkA = markA
 	info.MarkB = markB
 	p.assembleSubStreams(lookup)
-	p.fillSummary()
+	p.fillSummary(lookup)
 	return p, nil
 }
 
@@ -471,7 +474,7 @@ func scanDeposits(b []byte) []DepositRecord {
 	return out
 }
 
-func (p *Partition) fillSummary() {
+func (p *Partition) fillSummary(lookup func(int16) string) {
 	info := &p.Info
 	info.Pages = len(p.Pages)
 	for i := range p.Pages {
@@ -503,6 +506,7 @@ func (p *Partition) fillSummary() {
 		}
 		if len(ss.Records) > 0 {
 			ssi.Classes = CensusClasses(ss.Records)
+			ssi.ElementClasses = ElementClassCensus(ss, lookup)
 		}
 		if len(ss.Deposits) > 0 {
 			ssi.FirstCounter = ss.Deposits[0].Counter
