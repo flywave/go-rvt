@@ -138,6 +138,8 @@
 
 | R82 | **样条 payload 定位边界（M10 探察收口）**：① `[NurbSpline][0]` 块 = **引用列表**（denormal f64 解出小整数——整数数组误读），非坐标对象；② knot 向量内容锚定（≥4 连同值 f64 + 单调尾）在 class-102 全扫仅命中**整数数组假阳性**（重复 u32=2 数组）——class-102 无裸 f64 节点向量；③ 结论：样条坐标 payload 或在未定位的块型中、或样条在 deposit 外另有存储——**需 deposit 写出器级文法（R76 检验链）或样条密集样例**。累计 4 轮探针（R72/R73/R81/R82）已穷尽黑盒方法 | knot 内容锚定扫描（假阳性 4 处全为 u32=2 数组）+ GPoint/GLine/NurbSpline [0] 块对比 | 观察 | 写出器文法（M10 主线）|
 
+| R101 | **NurbSpline/PolyMesh 扫描器实现（M11 收口）**：`ScanNurbSplines`（Degree/Closed/Rational/ControlPoints=WPoint 4×f64/Knots 全 schema 解码）+ `ScanPolyMeshes`（StyleID/MaterialID/Flags/FacetedTopo）——扫描器就绪待富样例填充。实测：NurbSpline=0（样例限制 R73）、PolyMesh=64/407 个类标块（其中部分为引用表非内联对象） | rvt/geometry.go + 测试 | 观察 | 富样例到位后即出数据 |
+
 | R90 | **GArc 帧破解（富样例）+ 归属边界**：完整帧 = `[i16 GArc][EP 2×f64][XDir 24][YDir 24][Radius 8][Center 24][IsFilled 1]`，**轴为缩放向量**（椭圆式，非单位——单位门 0 命中、正交+有限门 9 命中，样例 EP=(0,0)/C=(0,0) 对称、X/Y 共享分量结构清晰）；`ScanInlineGArcs` 更新为正交+有限门（EP 前缀版）。**归属边界**：9 个命中全在树区间之外（组间引用区）——树 counter 归属需 deposit 边界映射（M11 剩余）；Model.InlineArcs 已接线 | 富样例帧扫描（9 结构化命中） | 观察→推断 | 组间区归属；9 对象的元素映射 |
 
 | R91 | **组间区归属基础设施落地（M11 收口）**：`ScanInlineGArcsAttributed`（EP 有限/幅值门 + 轴非零正交（相对）门 + 半径门 + 最近前驱树 counter 归属）——富样例实测 **1 条弧归入已知元素 291951**（R=2.64ft，C=原点）；更严的相对正交门下 R90 的 9 命中收敛为 1（其余为 dot≤500 松阈假阳性）——**富样例实际 GArc 对象极少**（与 378 目录噪声结论一致）。归属框架（最近前驱树）+ 门集就绪，富样例到位即用 | ScanInlineGArcsAttributed + TestXAttributed（1/1 已知元素） | 观察 | 元素 291951 的弧语义；更多命中需富样例 |

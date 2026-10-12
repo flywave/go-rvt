@@ -790,3 +790,141 @@ func vecMag6(b []byte) float64 {
 	}
 	return math.Sqrt(s)
 }
+
+// NurbSpline scanner (R101): GNurbSpline body per R98 schema:
+//	[Degree i32][Closed bool][Rational bool]
+//	[ControlPoints: count i32 + count × WPoint(weight,x,y,z) = 4×f64 each]
+//	[Knots: count i32 + count × f64]
+// GNode lazy fields (GInfo) deferred to dynamic section (R97).
+
+// WPoint is one NURBS control point (weight + 3D position).
+type WPoint struct {
+	W, X, Y, Z float64
+}
+
+// NurbSplineData is a decoded GNurbSpline inline object.
+type NurbSplineData struct {
+	ElementID     uint32    `json:"element_id"`
+	Degree        int32     `json:"degree"`
+	Closed        bool      `json:"closed"`
+	Rational      bool      `json:"rational"`
+	ControlPoints []WPoint  `json:"control_points"`
+	Knots         []float64 `json:"knots"`
+}
+
+// ScanNurbSplines scans class-103 G trees for GNurbSpline inline objects
+// using the R98 schema, attributed via tree counter.
+func ScanNurbSplines(data []byte, gNurb int16, trees []GTree) []NurbSplineData {
+	var out []NurbSplineData
+	for _, tr := range trees {
+		body := data[tr.Offset+18 : tr.End]
+		for k := 0; k+2+8 <= len(body); k += 2 {
+			if int16(binary.LittleEndian.Uint16(body[k:])) != gNurb {
+				continue
+			}
+			ns := NurbSplineData{ElementID: tr.Counter}
+			p := body[k+2:]
+			// Degree i32
+			if len(p) < 4 {
+				continue
+			}
+			ns.Degree = int32(binary.LittleEndian.Uint32(p))
+			p = p[4:]
+			// Closed bool
+			if len(p) < 1 {
+				continue
+			}
+			ns.Closed = p[0] != 0
+			p = p[1:]
+			// ControlPoints: count i32 + count × 4×f64 (WPoint)
+			if len(p) < 4 {
+				continue
+			}
+			cpCount := int(binary.LittleEndian.Uint32(p))
+			p = p[4:]
+			if cpCount < 0 || cpCount > 4096 || len(p) < cpCount*32 {
+				continue
+			}
+			for j := 0; j < cpCount; j++ {
+				w := math.Float64frombits(binary.LittleEndian.Uint64(p))
+				x := math.Float64frombits(binary.LittleEndian.Uint64(p[8:]))
+				y := math.Float64frombits(binary.LittleEndian.Uint64(p[16:]))
+				z := math.Float64frombits(binary.LittleEndian.Uint64(p[24:]))
+				if math.IsNaN(w) || math.IsInf(w, 0) || math.Abs(w) > 1e6 ||
+					math.IsNaN(x) || math.IsInf(x, 0) || math.Abs(x) > 1e6 ||
+					math.IsNaN(y) || math.IsInf(y, 0) || math.Abs(y) > 1e6 ||
+					math.IsNaN(z) || math.IsInf(z, 0) || math.Abs(z) > 1e6 {
+					cpCount = 0
+					break
+				}
+				ns.ControlPoints = append(ns.ControlPoints, WPoint{W: w, X: x, Y: y, Z: z})
+				p = p[32:]
+			}
+			if cpCount == 0 {
+				continue
+			}
+			// Knots: count i32 + count × f64
+			if len(p) < 4 {
+				continue
+			}
+			knCount := int(binary.LittleEndian.Uint32(p))
+			p = p[4:]
+			if knCount < 0 || knCount > 4096 || len(p) < knCount*8 {
+				continue
+			}
+			for j := 0; j < knCount; j++ {
+				kv := math.Float64frombits(binary.LittleEndian.Uint64(p))
+				if math.IsNaN(kv) || math.IsInf(kv, 0) {
+					knCount = 0
+					break
+				}
+				ns.Knots = append(ns.Knots, kv)
+				p = p[8:]
+			}
+			if ns.Degree >= 1 && ns.Degree <= 10 && len(ns.ControlPoints) > 0 {
+				out = append(out, ns)
+			}
+		}
+	}
+	return out
+}
+
+// PolyMeshData is a decoded GPolyMesh inline object (R98 schema).
+type PolyMeshData struct {
+	ElementID   uint32 `json:"element_id"`
+	StyleID     int32  `json:"style_id"`
+	MaterialID  int32  `json:"material_id"`
+	Flags       uint32 `json:"flags"`
+	FacetedTopo []byte `json:"faceted_topology_raw"`
+}
+
+// ScanPolyMeshes scans class-103 G trees for GPolyMesh inline objects.
+// PolyMesh body: [InteriorGStyleID i32][MaterialID ElementId i32]
+//
+//	[PolyMeshFlags u32][FacetedTopology obj ref — variable].
+//
+// The FacetedTopology is stored as raw bytes (layout requires reader REA).
+func ScanPolyMeshes(data []byte, gPoly int16, trees []GTree) []PolyMeshData {
+	var out []PolyMeshData
+	for _, tr := range trees {
+		body := data[tr.Offset+18 : tr.End]
+		for k := 0; k+2+12 <= len(body); k += 2 {
+			if int16(binary.LittleEndian.Uint16(body[k:])) != gPoly {
+				continue
+			}
+			p := body[k+2:]
+			if len(p) < 12 {
+				continue
+			}
+			pm := PolyMeshData{ElementID: tr.Counter}
+			pm.StyleID = int32(binary.LittleEndian.Uint32(p))
+			pm.MaterialID = int32(binary.LittleEndian.Uint32(p[4:]))
+			pm.Flags = binary.LittleEndian.Uint32(p[8:])
+			if len(p) > 12 {
+				pm.FacetedTopo = p[12:]
+			}
+			out = append(out, pm)
+		}
+	}
+	return out
+}

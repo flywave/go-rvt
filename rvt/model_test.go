@@ -474,3 +474,46 @@ func TestInlineLineContainment(t *testing.T) {
 		t.Logf("containment rate: %.1f%%", 100*float64(in)/float64(in+out))
 	}
 }
+
+// TestPolyMeshAndNurbScan validates that the NurbSpline and PolyMesh
+// scanners run without error on both samples (R101).
+func TestPolyMeshAndNurbScan(t *testing.T) {
+	for _, tc := range []struct {
+		path, year, part string
+	}{
+		{samples[0], "2023", "Partitions/13"},
+		{richSample, "2017", "Partitions/3"},
+	} {
+		data, err := os.ReadFile(tc.path)
+		if err != nil {
+			continue
+		}
+		f, _ := OpenCFB(data)
+		raw, _ := f.Stream(tc.part)
+		lookup := func(cls int16) string {
+			n, _ := classindex.Lookup(tc.year, cls)
+			return n
+		}
+		part, _ := ReadPartitionWithLookup(tc.part[11:], raw, lookup)
+		var s103 *SubStream
+		for _, ss := range part.SubStreams {
+			if ss.Class == 103 {
+				s103 = ss
+			}
+		}
+		gNurb, _ := classindex.Index(tc.year, "OdBmGNurbSpline")
+		gPoly, _ := classindex.Index(tc.year, "OdBmGPolyMesh")
+		gi := ParseGeometryIndex(s103.Data)
+		gEl, _ := classindex.Index(tc.year, "OdBmGElement")
+		trees := ScanGTrees(s103.Data, gi.DataOffset, int16(gEl), lookup)
+		ns := ScanNurbSplines(s103.Data, int16(gNurb), trees)
+		pm := ScanPolyMeshes(s103.Data, int16(gPoly), trees)
+		t.Logf("%s: NurbSpline=%d PolyMesh=%d", tc.year, len(ns), len(pm))
+		for i, s := range ns {
+			if i >= 2 {
+				break
+			}
+			t.Logf("  spline %d: elem=%d deg=%d CP=%d knots=%d", i, s.ElementID, s.Degree, len(s.ControlPoints), len(s.Knots))
+		}
+	}
+}
