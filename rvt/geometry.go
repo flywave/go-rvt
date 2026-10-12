@@ -270,11 +270,11 @@ func ScanGTrees(data []byte, from int, gElement int16, lookup func(int16) string
 		g.End = next
 		body := data[pos+18 : next]
 		for k := 0; k+2 <= len(body); k += 2 {
-			cls := int16(binary.LittleEndian.Uint16(body[k:]))
 			// inline GRep-family object: [i16 cls][GeomBBox 48B][GTightBBox 48B]
-			// — the two boxes are byte-identical on real objects (R67)
+			// — the two boxes are byte-identical on real objects (R67); the
+			// class tag varies by version/block (v7 uses other tags — R89),
+			// so detection is shape-based only.
 			if k+2+96 <= len(body) &&
-				isBBoxClass(cls, lookup) &&
 				isPlausibleBBox(body[k+2:k+50]) &&
 				bytes.Equal(body[k+2:k+50], body[k+50:k+98]) {
 				bb := geom.BBox{
@@ -293,6 +293,7 @@ func ScanGTrees(data []byte, from int, gElement int16, lookup func(int16) string
 				k += 98
 				continue
 			}
+			cls := int16(binary.LittleEndian.Uint16(body[k:]))
 			if name := lookup(cls); name != "" && cls > 16 && k+6 <= len(body) {
 				id := binary.LittleEndian.Uint32(body[k+2:])
 				if id <= maxElementID {
@@ -655,6 +656,51 @@ func ScanInlineGArcs(data []byte, gArc int16, trees []GTree, lookup func(int16) 
 					X: math.Float64frombits(binary.LittleEndian.Uint64(p[56:])),
 					Y: math.Float64frombits(binary.LittleEndian.Uint64(p[64:])),
 					Z: math.Float64frombits(binary.LittleEndian.Uint64(p[72:])),
+				},
+			})
+		}
+	}
+	return out
+}
+
+// ScanInlineGLinesKeyed attributes inline GLine objects to their enclosing
+// G-tree element (tree counter) — the class-103 trees carry both the bboxes
+// and the inline geometry, so attribution is exact by range.
+func ScanInlineGLinesKeyed(data []byte, gLine int16, trees []GTree) []geom.BoundLine {
+	var out []geom.BoundLine
+	for _, tr := range trees {
+		body := data[tr.Offset+18 : tr.End]
+		for k := 0; k+2+48 <= len(body); k += 2 {
+			if int16(binary.LittleEndian.Uint16(body[k:])) != gLine {
+				continue
+			}
+			var p [6]float64
+			plain := true
+			nonzero := false
+			for kk := 0; kk < 6; kk++ {
+				p[kk] = math.Float64frombits(binary.LittleEndian.Uint64(body[k+2+kk*8:]))
+				if math.IsNaN(p[kk]) || math.IsInf(p[kk], 0) || math.Abs(p[kk]) > 1e5 {
+					plain = false
+					break
+				}
+				if p[kk] != 0 {
+					nonzero = true
+				}
+			}
+			if !plain || !nonzero {
+				continue
+			}
+			dx := p[3] - p[0]
+			dy := p[4] - p[1]
+			dz := p[5] - p[2]
+			if math.Abs(dx)+math.Abs(dy)+math.Abs(dz) < 1e-9 {
+				continue
+			}
+			out = append(out, geom.BoundLine{
+				ElementID: tr.Counter,
+				Line: geom.Line{
+					Origin:    geom.Point3{X: p[0], Y: p[1], Z: p[2]},
+					Direction: geom.Point3{X: p[3], Y: p[4], Z: p[5]},
 				},
 			})
 		}

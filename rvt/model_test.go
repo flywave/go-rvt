@@ -416,3 +416,61 @@ func math64abs(v float64) float64 {
 	}
 	return v
 }
+
+// TestInlineLineContainment (R78 rerun on v7-rich sample): inline lines
+// attributed via tree counters should fall inside their element bboxes.
+func TestInlineLineContainment(t *testing.T) {
+	data, err := os.ReadFile(richSample)
+	if err != nil {
+		t.Skip("no sample")
+	}
+	f, _ := OpenCFB(data)
+	raw, _ := f.Stream("Partitions/3")
+	lookup := func(cls int16) string {
+		n, _ := classindex.Lookup("2017", cls)
+		return n
+	}
+	part, _ := ReadPartitionWithLookup("3", raw, lookup)
+	m := part.Model("2017")
+	var s103 *SubStream
+	for _, ss := range part.SubStreams {
+		if ss.Class == 103 {
+			s103 = ss
+		}
+	}
+	gi := ParseGeometryIndex(s103.Data)
+	gEl, _ := classindex.Index("2017", "OdBmGElement")
+	gl, _ := classindex.Index("2017", "OdBmGLine")
+	trees := ScanGTrees(s103.Data, gi.DataOffset, int16(gEl), lookup)
+	bound := ScanInlineGLinesKeyed(s103.Data, int16(gl), trees)
+	bboxOf := map[uint32]geom.BBox{}
+	for _, e := range m.Elements {
+		if e.BBox != nil {
+			bboxOf[e.ID] = *e.BBox
+		}
+	}
+	const tol = 1.0
+	in, out, noBBox := 0, 0, 0
+	for _, b := range bound {
+		bb, ok := bboxOf[b.ElementID]
+		if !ok {
+			noBBox++
+			continue
+		}
+		inside := func(p geom.Point3) bool {
+			return p.X >= bb.Min.X-tol && p.X <= bb.Max.X+tol &&
+				p.Y >= bb.Min.Y-tol && p.Y <= bb.Max.Y+tol &&
+				p.Z >= bb.Min.Z-tol && p.Z <= bb.Max.Z+tol
+		}
+		if inside(b.Origin) && inside(b.Direction) {
+			in++
+		} else {
+			out++
+		}
+	}
+	t.Logf("v7 inline lines: %d", len(bound))
+	t.Logf("v7 inline-line containment: in=%d out=%d (no-bbox %d)", in, out, noBBox)
+	if in+out > 0 {
+		t.Logf("containment rate: %.1f%%", 100*float64(in)/float64(in+out))
+	}
+}
