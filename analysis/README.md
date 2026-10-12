@@ -84,6 +84,8 @@ go-dgn 侧仅保留指引（`go-dgn/analysis/04-rvt/README.md`）。
    FamilySymbol 尾=f64 坐标数组；TailKind 分类器（ids/floats64/floats32/
    scalars/mixed）+ ExtendedTail 结构标记（R64）
    - 未竟：各类扩展尾逐字段 schema；4B 值↔属性名映射
+11. 🔎 **M7 G blob 定界（边界探察，未完）**：G 标记双子流分布（102/103），
+    真对象 blob 与目录交错——指向规则为下一 REA 战役入口（R65）
 
 ## 包结构
 
