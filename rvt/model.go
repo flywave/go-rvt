@@ -18,6 +18,7 @@ type Model struct {
 	BReps    []geom.BRep
 	Trees    []geom.GTree
 	Curves   []geom.Line
+	Arcs     []geom.Arc
 }
 
 // geometrySubStreamClass is the class-103 page tag (both samples).
@@ -58,6 +59,7 @@ func (p *Partition) Model(version string) *Model {
 			if gl, ok := classindex.Index(version, "OdBmGLine"); ok {
 				m.Curves = ScanGLines(store.Data, int16(gl))
 			}
+			m.Arcs = ScanGArcs(store.Data)
 		}
 		gEl, ok := classindex.Index(version, "OdBmGElement")
 		if ok {

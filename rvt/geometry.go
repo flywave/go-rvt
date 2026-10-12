@@ -350,3 +350,42 @@ func ScanGLines(data []byte, gLine int16) []geom.Line {
 	}
 	return out
 }
+
+// ScanGArcs collects circular arcs from a class-102 object store by
+// content anchoring (findings R68/R69): a 10-f64 window of unit XDir,
+// unit YDir (dot ~ 0), positive radius, followed by a 3-f64 center.
+// These are model-space arcs (radii tens of feet observed).
+func ScanGArcs(data []byte) []geom.Arc {
+	var out []geom.Arc
+	for off := 0; off+80 <= len(data); off += 2 {
+		var f [10]float64
+		ok := true
+		for k := 0; k < 10; k++ {
+			f[k] = math.Float64frombits(binary.LittleEndian.Uint64(data[off+k*8:]))
+			if math.IsNaN(f[k]) || math.IsInf(f[k], 0) {
+				ok = false
+				break
+			}
+		}
+		if !ok {
+			continue
+		}
+		xm := math.Sqrt(f[0]*f[0] + f[1]*f[1] + f[2]*f[2])
+		ym := math.Sqrt(f[3]*f[3] + f[4]*f[4] + f[5]*f[5])
+		dot := f[0]*f[3] + f[1]*f[4] + f[2]*f[5]
+		if xm < 0.99 || xm > 1.01 || ym < 0.99 || ym > 1.01 || math.Abs(dot) > 0.01 {
+			continue
+		}
+		if f[6] <= 1e-6 || f[6] > 1e4 {
+			continue
+		}
+		out = append(out, geom.Arc{
+			XDir:   geom.Point3{X: f[0], Y: f[1], Z: f[2]},
+			YDir:   geom.Point3{X: f[3], Y: f[4], Z: f[5]},
+			Radius: f[6],
+			Center: geom.Point3{X: f[7], Y: f[8], Z: f[9]},
+		})
+		off += 78
+	}
+	return out
+}

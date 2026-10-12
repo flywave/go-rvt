@@ -126,6 +126,8 @@
 
 | R69 | **OBJREF 点/向量目标类线上形态定案**：Coord/OriginPoint/DirectionVector/XDirection/YDirection/Center 的目标 reader = `OdGePoint3dReader<double>::read`（TB_Common @0x2a068）= **3×doubleReader = 24B（x,y,z）内联、无类前缀**（float 变体 @0x2a0e2 同构）——快路径点/向量不写 [i16 类索引]。GPoint[0] 块（3 处全同字节）= PointElementGStep(3098/3099) 引用列表而非坐标点——GPoint 实例坐标在其 G 树/其他块。GArc payload 前段含逐实例可变的 GCurve/GNode 前缀（EndParams/GInfo），需锚定前缀对照轮 | objdump GPoint::read（setCoord 前 callq OdGePoint3dReader::read@plt）+ TB_Common 反汇编 + GPoint[0] 三处字节比对 | 观察 | GArc/GPoint 完整布局需锚定前缀分析 |
 
+| R70 | **GArc 内容锚定解码（M9 二收）**：[GLine/GArc][0] 式头不能单独锚定（大量整数数据误配）——改用**内容锚定**：10×f64 窗口 = XDir 单位向量 + YDir 单位向量（dot≈0）+ Radius>0 + Center(3×f64)。`ScanGArcs` 落地：**2023 提取 3,972 条模型空间圆弧**（R=74.27/75.55 ft、C=(-39.86,22.33,-63.25) 等；单位 XDir/YDir 正交），`Model.Arcs` + ModelSummary.Arcs。NurbSpline(2094) 对象定位（degree=4 标志 `04 00 08 01`、knot 计数 69 可见、WPoint 4×f64 数组在尾）——数组帧解码待专项；PolyMesh(2104) 头已见 | rvt/geometry.go ScanGArcs + TestArcsRealSamples + NurbSpline/PolyMesh 探针 | 观察→推断 | NurbSpline/PolyMesh 数组帧；曲线/弧↔元素绑定（deposit 块键） |
+
 ## M8 对象模型声明轮
 
 | ID | 结论 | 证据 | 置信度 | 边界/未知 |

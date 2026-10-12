@@ -200,3 +200,33 @@ func TestCurvesRealSamples(t *testing.T) {
 			c.Origin.X, c.Origin.Y, c.Origin.Z, c.Direction.X, c.Direction.Y, c.Direction.Z)
 	}
 }
+
+// TestArcsRealSamples validates content-anchored arc extraction (R68/R69).
+func TestArcsRealSamples(t *testing.T) {
+	data, err := os.ReadFile(samples[0])
+	if err != nil {
+		t.Skip("no sample")
+	}
+	f, _ := OpenCFB(data)
+	raw, _ := f.Stream("Partitions/13")
+	lookup := func(cls int16) string {
+		name, _ := classindex.Lookup("2023", cls)
+		return name
+	}
+	part, err := ReadPartitionWithLookup("13", raw, lookup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := part.Model("2023")
+	t.Logf("arcs: %d", len(m.Arcs))
+	if len(m.Arcs) == 0 {
+		t.Fatal("no arcs extracted")
+	}
+	for i, a := range m.Arcs {
+		if a.Radius <= 0 || a.Radius > 1e4 {
+			t.Fatalf("arc %d radius %v", i, a.Radius)
+		}
+	}
+	a := m.Arcs[0]
+	t.Logf("sample arc: R=%.4f C=(%.4f,%.4f,%.4f)", a.Radius, a.Center.X, a.Center.Y, a.Center.Z)
+}
