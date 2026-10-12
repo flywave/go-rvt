@@ -103,3 +103,14 @@ func Index(version, className string) (index int16, ok bool) {
 	}
 	return 0, false
 }
+
+// LookupName is an alias of Lookup for readability at call sites that
+// already hold an index.
+func LookupName(index int16) string {
+	for _, t := range tables {
+		if name, ok := t[index]; ok {
+			return name
+		}
+	}
+	return ""
+}

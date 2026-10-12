@@ -138,6 +138,8 @@
 
 | R78 | **绑定精度检验=当前样例不可判定**：bbox 包含测试（曲线端点 ∈ 元素世界 bbox ±1ft）在 2023 样例上无法执行——109 条绑定曲线的所属元素**无一具有 G 树 bbox**（925 个 bbox 属于其他元素），弧检验同样 0/1。精度量化需富样例（曲线元素带 bbox 的真实模型，外部依赖）；当前最近前驱键归属保持启发式置信级 | TestBindingPrecision（0/109 重叠） | 观察 | 富样例后重跑 |
 
+| R79 | **★富样例到手 = 双版本变体齐备**：用户下载 `rac_advanced_sample_project.rvt`（15.3MB，Autodesk-Forge/viewer-navigation.sample GitHub 镜像）= **Revit 2015** 文件——① BFI **rev=10** 布局（R58 预言场景：字段序不同，CentralModelIdentity 处截断，需 rev 分派布局）；② **PartitionStreamVersion 7**（2022/23 为 9）——三子流 101/102/103 同构（6.9/35/26MB）；③ **v7 记录环同框架验证**：class-101 头 `[counter][87][1218][0][0xffff…]` + R45 记录环走读 2,893 条干净（@524KB 首个脏页停止）；④ class-103 v7 头 = GeomStep 型目录（`[counter][c1=193][0x76][2][0x2cb4]` 12B 项） | TestXRichV7 + v7 走读 | 观察 | v7 元素/G 树/GInfo 布局=下一战役（M11） |
+
 | R75a | readOverride@0x136306 = 每数据库覆盖钩子（map\<OdBmDatabase\*, function\> 查找+调用），非字节文法解析器——正常路径解析在 InitReader→DepositPE keep/withdraw 链与 DiskManager 运行时缓存之后 | readOverride 反汇编（Rb_tree find + std::function invoke） | 观察 | — |
 
 | R76 | **deposit 文法定性（统一模型）**：withdrawStreamImpl = DiskManager::read 纯包装（运行时缓存，非文法）；keep = DiskManager::write 包装——**deposit 内容文法由 keep() 调用方（G 序列化器）按标准对象信封规则直接写出**（R31/R49/R57），无独立 deposit 文法层。统一假设：deposit = [静态遍历：对象存根（懒节点 6B `[i16 cls][u32 stub]`）][动态段：按队列序的懒节点真值]——6B 存根的解释 = 静态 pass 给排队属性写的占位（如 GLine#10-13 连续 6B 项），几何真值在 deposit 尾部动态段。检验路径：deposit 边界映射（DiskManager 块长 412B×头部块）+ 动态段对齐 | withdrawStreamImpl@0x13545c（DiskManager::read 调用链）+ keep@0x136f98（write 对称）反汇编 | 观察→推断 | 动态段与存根的队列序对齐 = 绑定器实现的关键检验 |
