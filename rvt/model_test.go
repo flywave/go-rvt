@@ -380,8 +380,12 @@ func TestInlineCurvesRealSamples(t *testing.T) {
 	gl, _ := classindexLookup2023("OdBmGLine")
 	lines := ScanInlineGLines(geo.Data, gl)
 	t.Logf("inline GLine objects: %d", len(lines))
-	if len(lines) < 1000 {
-		t.Errorf("only %d inline lines (want >= 1000)", len(lines))
+	// R102: the GInfo-signature gate trades recall for precision — the old
+	// R88 gate admitted ~3.8k tag hits whose payload bytes were shifted
+	// reads (catalog/neighbor noise); the GInfo-verified set is ~416 with
+	// physics-plausible endpoints.
+	if len(lines) < 400 {
+		t.Errorf("only %d inline lines (want >= 400)", len(lines))
 	}
 	nonDegenerate := 0
 	var sample geom.Line
@@ -401,7 +405,7 @@ func TestInlineCurvesRealSamples(t *testing.T) {
 	t.Logf("non-degenerate: %d; sample: (%.4f,%.4f,%.4f)->(%.4f,%.4f,%.4f)",
 		nonDegenerate, sample.Origin.X, sample.Origin.Y, sample.Origin.Z,
 		sample.Direction.X, sample.Direction.Y, sample.Direction.Z)
-	if nonDegenerate < 100 {
+	if nonDegenerate < 400 {
 		t.Errorf("only %d non-degenerate lines", nonDegenerate)
 	}
 }

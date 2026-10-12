@@ -42,6 +42,16 @@
 表流尾: u32 UnitSystem{0=Metric,1=Imperial}
 ```
 
+写出器对偶（R102，TB_LoaderBase 反编译定案）:
+```
+serializeObject → ObjectPtrWriter::write → OdBmObjectPtrWriter::write =
+  OdBmOutQueue{静态整数种子 null→0, ctx→1, root→2; referable 首见分配递增 N}
+  + ObjectPtrInitWriter::write{[u16 类索引][静态体: loadingMode=0 属性按注册序]}
+  + OutQueue::writeDynamicProperties{record 链逐个 flush（loadingMode=1 属性→动态段）}
+引用值 = 静态整数 i32（StaticIntegerBuilder/Reader ↔ DynamicQueue::addIdReference）
+→ [i16 class][u32 N] = 类索引 + deposit 内第 N 个注册对象（读侧 initReferences [0,1,2] 种子镜像）
+```
+
 类索引**按年份重编号**：查 `tables/class-index-{2022,2023}.csv`
 （1398@2023 = 1340@2022 = OdBmElementHeader）。91/102/103 是分区页/子流标签，非类索引。
 
@@ -53,6 +63,12 @@
 - 类索引锚点：GElement=2073、GBrep=2044、GLine=1798、GEdge=1301、GPoint=2098、
   GeomTable=2155、Geometry=2160（2023）
 - 外部导入形状：A3PartyObject（SAT）；链接模型：GRvtLink
+- **GInfo 内联前缀模型（R102a）**：G* 静态体起点 = [GInfo 16B]{Tag,ControlCommand,GStyleElemId,Flags}
+  （Flags=Default 0x80004/DefaultModel 0x88004），GCurve 系再续 [EndParams 16B]：
+  GLine=[GInfo][EP][Origin 24][Dir 24] 已双样例验证（424/309 条真实坐标，R102b）；
+  GArc 轴场偏移未解（R102b 边界）；GRep 无 GInfo 前缀（per-class 差异）；
+  GPolyMesh.FacetedTopology=loadingMode 1 动态 → 不入静态体
+- G 族每属性 {Type, itemMode, size, loadingMode} 权威表 = TB_Format2023Classes::classes::\<C\>()（R102a）
 
 ## 3. 压缩/校验体系
 
@@ -76,6 +92,9 @@
 | 动态段 | 🟡 队列序标准信封（R57，位压缩假设作废）；字节框架需队列语义 |
 | ElementId 裸宽 | 🟡 队列回填定案；裸宽在 PE/objectReader[?] |
 | NurbSpline 权重 | ✅ WPoint={f64 weight, Point3d}=4×f64 内联（R54） |
+| deposit 写出器文法 | ✅ OutQueue 静态整数+InitWriter+record flush（R102）；record 头/尾插对偶[?] |
+| GInfo 前缀 | ✅ 内联 16B+Flags 家族（R102a）；GLine 帧双样例验证（R102b）；GRep 例外[?] |
+| GArc 轴场字节偏移 | 🟡 GInfo+EP 槽位定案；X/Y/R/C 全相位无有效帧（R102b，M11 剩余） |
 | 动态属性段 | ✅ 队列驱动标准对象读（R57）；~~位压缩~~作废 |
 | BFI 修订 | ✅ 接受表 2011→{3}…2023–26→{14}（R53）；rev≠14 布局=外部样例 |
 | 签名 64B | ✅ SDK 无验证路径=跳过（R55）；算法=外部（Revit 侧） |
@@ -98,5 +117,5 @@
 | 06-class-index.md | 类索引全表方法与勘误 |
 | 07-dynamic-queue.md | DynamicQueue 队列语义/字段表（动态段对齐，R58） |
 | bim-sdk-modules.md / oda-bim-clues.md | SDK 模块地图 / 消费方线索 |
-| findings.md | 台账 R1–R39 |
+| findings.md | 台账 R1–R102 |
 | tables/*.csv, g-node-properties.txt | 提取产物 |
