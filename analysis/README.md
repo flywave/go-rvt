@@ -23,7 +23,10 @@ go-dgn 侧仅保留指引（`go-dgn/analysis/04-rvt/README.md`）。
 | `analysis/rvt-basicfileinfo.md` | BasicFileInfo TLV 布局 + 字段映射 | C2 ✅ 主体 |
 | `analysis/bim-sdk-modules.md` | ODA BimRv 模块地图 + Loader 管线（E1/E2） | C0 ✅ 盘点 |
 | `analysis/oda-bim-clues.md` | 3D Repo 消费方代码线索（R3–R10，历史输入） | 已消化 |
-| `evidence/external/FileProcessorRvt.cpp` | 3D Repo bim-ex 证据源存档 | E1-类外部 |
+| `analysis/rea-extract-plan.md` | REA 提取清单（P0 信封→P3 几何） | 第 4 轮已执行（#1/#2/#4/#5/#6/#13/#14/#16/#17 落地） |
+| `analysis/rvt-format.md` | **格式总纲（权威索引）**：全景+信封契约+几何面+未知队列 | 持续 |
+| `analysis/01…06-*.md` | 信封/ElemTable/几何模型/G 类/收口/类索引 六份编号报告 | 第 4 轮 |
+| `analysis/tables/` | class-index CSV ×2、G 节点属性/类型表 | 提取产物 |
 
 ## 实现路线
 
@@ -45,6 +48,14 @@ go-dgn 侧仅保留指引（`go-dgn/analysis/04-rvt/README.md`）。
    损坏分类三态（verified / corrupt_data / unreadable）+ **R29：+353 系统性索引陈旧发现**
    （修正 R21 随机损坏解读）；合成夹具端到端测试
    - 未竟：对象信封全长解码（ObjectPtrReader 在外部库）；干净样例复核（R21/R29）
+5. ✅ **M4 对象记录层（已落地，第 4 轮 REA 报告 R30–R44 驱动）**：
+   `rvt/classindex`（2022/2023 类索引全表嵌入：1398@2023=1340@2022=OdBmElementHeader，
+   按版本重编号）→ `rvt/objects.go` 记录环 walker
+   （`[counter][size][body][echo]`，class-101 验证：77,251/58,819 条 ElementHeader，
+   100% 覆盖）→ `rvt/elemtable.go`（8,276 条，footer 内嵌分区末条 deposit counter
+   =串联键实锤）→ `rvt/partition.go` R40 stale 回收（逻辑流 +20.3/+15.4MB）
+   → UnitSystem 尾 + ProjectInformation ZIP 元数据
+   - 未竟：per-class 属性级解码（需 per-class reader 元数据）；G* 字段级序列化（下轮战役）
 
 ## 包结构
 
@@ -52,7 +63,8 @@ go-dgn 侧仅保留指引（`go-dgn/analysis/04-rvt/README.md`）。
 internal/cfb/   OLE/CFB 只读（全路径递归；合成夹具 cfbtest + 真样例测试）
 internal/zg/    单 gzip 成员解压（ByteReader 精确边界；footer 宽容+状态位）
 bfi/            BasicFileInfo TLV 解析
-rvt/            Open/Metadata + ReadPartition（识别、流清单、BFI、TransmissionData、表层、分区容器+子流）
+rvt/            Open/Metadata + ReadPartition + 对象记录层（ElemTable/记录环普查）
+rvt/classindex/ 按版本类索引表（2022/2023 CSV 嵌入；Index4Enum→OdBm* 类名）
 cmd/rvtinfo/    CLI：rvtinfo <file.rvt> → JSON
 ```
 

@@ -3,6 +3,7 @@
 package rvt
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/binary"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/flywave/go-rvt/bfi"
 	"github.com/flywave/go-rvt/internal/cfb"
+	"github.com/flywave/go-rvt/rvt/classindex"
 )
 
 // StreamInfo describes one CFB stream.
@@ -49,6 +51,8 @@ type Metadata struct {
 	Tables            []TableInfo      `json:"tables,omitempty"`
 	ContentsRecords   []ContentsRecord `json:"contents_records,omitempty"`
 	PartitionWorksets []string         `json:"partition_worksets,omitempty"`
+	ElemTable         *ElemTableInfo   `json:"elem_table,omitempty"`
+	ProjectEntries    []string         `json:"project_entries,omitempty"` // ProjectInformation ZIP
 
 	// M3: partition containers (Partitions/<n>).
 	Partitions []PartitionInfo `json:"partitions,omitempty"`
@@ -131,6 +135,14 @@ func Open(data []byte) (*Metadata, error) {
 		if sp == "Global/PartitionTable" && data != nil {
 			md.PartitionWorksets = uniqueStrings(parsePartitionNames(data))
 		}
+		if sp == "Global/ElemTable" && data != nil {
+			if et, eerr := ParseElemTable(data); eerr == nil {
+				info := et.Info()
+				md.ElemTable = &info
+			} else {
+				md.ElemTable = &ElemTableInfo{Err: eerr.Error()}
+			}
+		}
 	}
 	sort.Slice(md.Tables, func(i, j int) bool { return md.Tables[i].Path < md.Tables[j].Path })
 
@@ -139,7 +151,16 @@ func Open(data []byte) (*Metadata, error) {
 		md.ContentsRecords = recs
 	}
 
-	// M3: partition containers.
+	if b, err := f.Stream("ProjectInformation"); err == nil && len(b) > 0 {
+		md.ProjectEntries = zipEntryNames(b) // R44: Atom project-parameter XML
+	}
+
+	// M3: partition containers, with version-aware class-index lookup for
+	// the object-record walk (class indexes are renumbered per Revit year).
+	lookup := func(cls int16) string {
+		name, _ := classindex.Lookup(md.RevitVersion, cls)
+		return name
+	}
 	for _, sp := range f.StreamPaths() {
 		if !bytes.HasPrefix([]byte(sp), []byte("Partitions/")) {
 			continue
@@ -149,7 +170,7 @@ func Open(data []byte) (*Metadata, error) {
 			continue
 		}
 		name := sp[len("Partitions/"):]
-		if part, perr := ReadPartition(name, b); part != nil {
+		if part, perr := ReadPartitionWithLookup(name, b, lookup); part != nil {
 			md.Partitions = append(md.Partitions, part.Info)
 			_ = perr
 		}
@@ -192,4 +213,18 @@ func parseTransmission(b []byte) *TransmissionInfo {
 		ti.Version = m[1]
 	}
 	return ti
+}
+
+// zipEntryNames lists entry names of a standard ZIP stream
+// (ProjectInformation = one Atom project-parameter XML — findings R44).
+func zipEntryNames(b []byte) []string {
+	zr, err := zip.NewReader(bytes.NewReader(b), int64(len(b)))
+	if err != nil {
+		return nil
+	}
+	out := make([]string, 0, len(zr.File))
+	for _, e := range zr.File {
+		out = append(out, e.Name)
+	}
+	return out
 }

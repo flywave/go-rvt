@@ -17,6 +17,7 @@ type TableInfo struct {
 	CompressedBytes  int    `json:"compressed_bytes"`
 	DecompressedSize int    `json:"decompressed_size"`
 	TrailerBytes     int    `json:"trailer_bytes"`
+	UnitSystem       string `json:"unit_system,omitempty"` // trailing u32: 0=metric 1=imperial (R36)
 	Error            string `json:"error,omitempty"`
 }
 
@@ -63,7 +64,24 @@ func decompressTable(path string, stream []byte) (*TableInfo, []byte, error) {
 	info.CompressedBytes = m.End - m.Start
 	info.DecompressedSize = len(m.Data)
 	info.TrailerBytes = len(m.Trailer)
+	info.UnitSystem = unitSystemSuffix(m.Data)
 	return info, m.Data, nil
+}
+
+// unitSystemSuffix reads the FixedFooterReader u32 (UnitSystem enum,
+// findings R36/R25: 0=Metric, 1=Imperial) at the end of a decompressed
+// table object stream. Empty when absent or out of range.
+func unitSystemSuffix(data []byte) string {
+	if len(data) < 4 {
+		return ""
+	}
+	switch binary.LittleEndian.Uint32(data[len(data)-4:]) {
+	case 0:
+		return "metric"
+	case 1:
+		return "imperial"
+	}
+	return ""
 }
 
 // parseContents walks the Contents magic framing. The u32 after the magic is

@@ -40,9 +40,10 @@ import (
 //
 // Pages whose record and gzip footer both verify are "verified"; their
 // decompressed payloads concatenate, per class, into the sub-stream data.
-// The locally corrupted sample regions (findings R21) inflate to garbage
-// with mismatched footers and stale index lengths — they are reported as
-// corrupt pages and excluded from the sub-stream data.
+// Pages whose index length is stale by a multiple of 353 bytes (R29/R40:
+// incrementally rewritten payloads with unrefreshed index/footer) inflate
+// cleanly and are recovered into the sub-stream data, flagged StaleIndex.
+// Remaining damaged pages are reported as errors and excluded.
 
 const (
 	partitionFixedHeader = 12 // u32 version, u32 [?], u32 [?] (869/817 on samples)
@@ -54,6 +55,10 @@ const (
 )
 
 var gzipMagic = []byte{0x1f, 0x8b, 0x08}
+
+// staleIndexDelta is the per-rewrite length deficit of stale-index pages
+// (findings R29/R40: -353 per rewrite, -706 = two rewrites).
+const staleIndexDelta = 353
 
 // PageRecord is the 32-byte index record preceding one page.
 type PageRecord struct {
@@ -90,18 +95,19 @@ func (r PageRecord) isSignature() bool {
 
 // Page is one gzip member of the page chain.
 type Page struct {
-	Offset    int // member start offset within the raw stream
-	CompLen   int
-	DecompLen int
-	Class     uint32
-	Kind      uint32
-	Record    *PageRecord // record preceding the member, when structurally valid
-	RecordOK  bool        // record.ownLen == CompLen+8
-	FooterOK  bool        // gzip footer matches the inflated payload
-	Readable  bool        // inflate succeeded
-	Verified  bool        // RecordOK && FooterOK — payload is trustworthy
+	Offset     int // member start offset within the raw stream
+	CompLen    int
+	DecompLen  int
+	Class      uint32
+	Kind       uint32
+	Record     *PageRecord // record preceding the member, when structurally valid
+	RecordOK   bool        // record.ownLen == CompLen+8
+	FooterOK   bool        // gzip footer matches the inflated payload
+	Readable   bool        // inflate succeeded
+	Verified   bool        // RecordOK && FooterOK — payload is trustworthy
+	StaleIndex bool        // R40 recovery: index stale by a 353-multiple, payload trusted
 
-	data []byte // decompressed payload (verified pages only)
+	data []byte // decompressed payload (verified + stale-index pages)
 }
 
 // PageError reports one damaged region of the stream.
@@ -125,23 +131,35 @@ type DepositRecord struct {
 
 // SubStream is one logical stream reconstructed from the pages of one class.
 type SubStream struct {
-	Class         uint32
-	Pages         int // all real pages of this class (incl. unreadable)
-	VerifiedPages int
-	LogicalBytes  int
-	Deposits      []DepositRecord
-	Data          []byte // concatenation of verified page payloads
+	Class        uint32
+	Pages        int // all real pages of this class (incl. unreadable)
+	DataPages    int // pages contributing data (verified + stale-index)
+	StalePages   int // recovered stale-index pages (R40)
+	LogicalBytes int
+	Deposits     []DepositRecord
+	Data         []byte // concatenation of verified + stale-index payloads
+
+	// Records/Walk are populated for the deposit-bearing sub-stream (the
+	// [counter][size][body][echo] object-record framing — R42/R44); other
+	// sub-streams carry different framing and are not walked.
+	Records   []ObjectRecord
+	WalkStats WalkStats
 }
 
 // SubStreamInfo is the JSON summary of one sub-stream.
 type SubStreamInfo struct {
-	Class         uint32 `json:"class"`
-	Pages         int    `json:"pages"`
-	VerifiedPages int    `json:"verified_pages"`
-	LogicalBytes  int    `json:"logical_bytes"`
-	Deposits      int    `json:"deposits,omitempty"`
-	FirstCounter  uint32 `json:"first_counter,omitempty"`
-	LastCounter   uint32 `json:"last_counter,omitempty"`
+	Class        uint32       `json:"class"`
+	Pages        int          `json:"pages"`
+	DataPages    int          `json:"data_pages"`
+	StalePages   int          `json:"stale_pages,omitempty"`
+	LogicalBytes int          `json:"logical_bytes"`
+	Deposits     int          `json:"deposits,omitempty"`
+	FirstCounter uint32       `json:"first_counter,omitempty"`
+	LastCounter  uint32       `json:"last_counter,omitempty"`
+	Records      int          `json:"records,omitempty"`
+	WalkBytes    int          `json:"walk_bytes,omitempty"`
+	WalkResyncs  int          `json:"walk_resyncs,omitempty"`
+	Classes      []ClassCount `json:"classes,omitempty"`
 }
 
 // PartitionInfo is the JSON summary of one Partitions/<n> stream.
@@ -154,6 +172,7 @@ type PartitionInfo struct {
 	Pages            int             `json:"pages"`         // real pages (readable + unreadable)
 	ReadablePages    int             `json:"readable_pages"`
 	VerifiedPages    int             `json:"verified_pages"`
+	StaleIndexPages  int             `json:"stale_index_pages"`  // R40 recovered
 	CorruptDataPages int             `json:"corrupt_data_pages"` // inflated but footer/index mismatch
 	UnreadablePages  int             `json:"unreadable_pages"`   // inflate failed
 	SpuriousMagics   int             `json:"spurious_magics,omitempty"`
@@ -181,8 +200,15 @@ type Partition struct {
 
 // ReadPartition parses one Partitions/<n> stream body. Corrupt regions are
 // reported in Errors / Info.PageErrors; the sub-stream data only contains
-// verified pages.
+// verified and stale-index-recovered pages.
 func ReadPartition(name string, stream []byte) (*Partition, error) {
+	return ReadPartitionWithLookup(name, stream, nil)
+}
+
+// ReadPartitionWithLookup is ReadPartition with a class-index lookup
+// (rvt/classindex) used to resolve record class names during the
+// sub-stream record walk.
+func ReadPartitionWithLookup(name string, stream []byte, lookup func(int16) string) (*Partition, error) {
 	if len(stream) < partitionFixedHeader+partitionRecordSize {
 		return nil, fmt.Errorf("rvt: partition %s: short stream (%d bytes)", name, len(stream))
 	}
@@ -247,12 +273,21 @@ func ReadPartition(name string, stream []byte) (*Partition, error) {
 				markA = rec.MarkA
 			}
 		}
-		pg.Verified = pg.RecordOK && pg.FooterOK
-		if pg.Verified {
+		if pg.RecordOK && pg.FooterOK {
+			pg.Verified = true
 			pg.data = m.Data
+		} else if pg.Record != nil {
+			// R40: pages rewritten in place with a stale index/footer show a
+			// constant length deficit that is a multiple of 353 bytes; the
+			// payload inflates cleanly (probe: record structure intact), so
+			// it is recovered rather than discarded.
+			if d := int(pg.Record.OwnLen) - (pg.CompLen + 8); d < 0 && d%staleIndexDelta == 0 {
+				pg.StaleIndex = true
+				pg.data = m.Data
+			}
 		}
 		p.appendPage(pg)
-		if !pg.Verified {
+		if !pg.Verified && !pg.StaleIndex {
 			detail := "gzip footer mismatch"
 			if pg.Record != nil && !pg.RecordOK {
 				detail = fmt.Sprintf("index len %d, actual %d", pg.Record.OwnLen, pg.CompLen+8)
@@ -265,7 +300,7 @@ func ReadPartition(name string, stream []byte) (*Partition, error) {
 
 	info.MarkA = markA
 	info.MarkB = markB
-	p.assembleSubStreams()
+	p.assembleSubStreams(lookup)
 	p.fillSummary()
 	return p, nil
 }
@@ -367,7 +402,7 @@ func (p *Partition) errAt(offset int, kind, detail string) {
 
 // assembleSubStreams groups real pages by class and concatenates the
 // verified payloads.
-func (p *Partition) assembleSubStreams() {
+func (p *Partition) assembleSubStreams(lookup func(int16) string) {
 	byClass := map[uint32]*SubStream{}
 	for i := range p.Pages {
 		pg := &p.Pages[i]
@@ -380,14 +415,22 @@ func (p *Partition) assembleSubStreams() {
 			byClass[pg.Class] = ss
 		}
 		ss.Pages++
-		if pg.Verified {
-			ss.VerifiedPages++
+		if pg.Verified || pg.StaleIndex {
+			ss.DataPages++
+			if pg.StaleIndex {
+				ss.StalePages++
+			}
 			ss.Data = append(ss.Data, pg.data...)
 		}
 	}
 	for _, ss := range byClass {
 		ss.LogicalBytes = len(ss.Data)
 		ss.Deposits = scanDeposits(ss.Data)
+		// Object-record walk: only the deposit-bearing sub-stream carries
+		// the validated [counter][size][body][echo] framing.
+		if len(ss.Deposits) > 0 {
+			ss.Records, ss.WalkStats = walkRecords(ss.Data, len(ss.Deposits)*depositRecordSize, lookup)
+		}
 		p.SubStreams = append(p.SubStreams, ss)
 	}
 	sort.Slice(p.SubStreams, func(i, j int) bool {
@@ -440,17 +483,26 @@ func (p *Partition) fillSummary() {
 		}
 		if pg.Verified {
 			info.VerifiedPages++
+		} else if pg.StaleIndex {
+			info.StaleIndexPages++
 		} else if pg.Readable {
 			info.CorruptDataPages++
 		}
 	}
 	for _, ss := range p.SubStreams {
 		ssi := SubStreamInfo{
-			Class:         ss.Class,
-			Pages:         ss.Pages,
-			VerifiedPages: ss.VerifiedPages,
-			LogicalBytes:  ss.LogicalBytes,
-			Deposits:      len(ss.Deposits),
+			Class:        ss.Class,
+			Pages:        ss.Pages,
+			DataPages:    ss.DataPages,
+			StalePages:   ss.StalePages,
+			LogicalBytes: ss.LogicalBytes,
+			Deposits:     len(ss.Deposits),
+			Records:      ss.WalkStats.Records,
+			WalkBytes:    ss.WalkStats.BytesWalked,
+			WalkResyncs:  ss.WalkStats.Resyncs,
+		}
+		if len(ss.Records) > 0 {
+			ssi.Classes = CensusClasses(ss.Records)
 		}
 		if len(ss.Deposits) > 0 {
 			ssi.FirstCounter = ss.Deposits[0].Counter

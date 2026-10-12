@@ -1,0 +1,29 @@
+GEdgeBase: 
+GElement: OdBmAppearanceAssetTableInterface, OdBmEdge, OdBmEdgeLoop, OdBmFacetedTopology, OdBmFacetedTopologyImplmnt, OdBmGConditionDirection, OdBmGConditionHemisphere, OdBmGControl, OdBmGEdgeBase, OdBmGElement, OdBmGSymbol, OdBmMaterialTableInterface, OdBmPropertySetBase, OdBmSubPick, OdBmViewportInfoBase, OdBmFace, Surface, OdBmFacet, Vertices, OdBmFacetedTopol, TheNewCommonNormal, NormalsFlag, PointsArr, NormVecsArr, Facets, EdgeVisFlags, OdBmFacetedTopology0, OdBmFacetedTopology10, OdBmFacetedTopology11, OdBmFacetedTopology12, OdBmFacetedTopology13, OdBmFacetedTopology1, OdBmFacetedTopology2, OdBmFacetedTopology3, OdBmFacetedTopology4, OdBmFacetedTopology5, OdBmFacetedTopology8, OdBmFacetedTopology9, OdBmFillGrid, Angle, Origin, Deltas, Segments, OdBmFillPatternData, WindowSize, LengthPerArea, StrokesPerArea, LinesPerLength, FillGrids, OdBmFillPattern, Orientation, Target, Name, Scale, OdBmFillPatternPlacer, Direction, Mirrored, PlacedDraft, UvScale, OdBmFloatFacetedTopology, Points, OdBmFloatNormalsFacetedTopology, CommonNormal, NormalsArr, OdBmFont, Size, Color, OdBmGARPlant, PlantName, PlantHeight, PruneHeight, OdBmGARRpc, RpcFileName, Data, OdBmGArc
+GArc: XDirection, YDirection, Radius, Center, IsFilled, OdBmGArray, StepTrf, NumInstances, OdBmGBackgroundImageRenderSettings, ImageFileName, OffsetWidth, OffsetHeight, FitType, OdBmGBiFlipControl, Origin, Base, Length, OdBmGBitmap
+GBitmap: Point, Size, BitmapType, Alignment, OdBmGBrep
+GBrep: Faces, OdBmGComponentRef, InstanceInfo, OdBmGConditionBase, Comp, OdBmGConditionClip, Vertecies, OdBmGConditionCut, RangeLo, RangeHi, OdBmGConditionDir, Direction, NegateDirCondition, OdBmGConditionInt, ParamType, Value, OdBmGConditionSelected, DBViewId, OdBmGConditionVModeType, ViewModeType, OdBmGConditionViewDetailLevel, DetailLevel, OdBmGConditionViewType, Test, OdBmGCurveDisplayOffset, GCurve, CurveNormals, OdBmGCurve
+GCurve: EndParams, OdBmGCylindricalHelix
+GCylindricalHelix: Radius, PitchOver2PI, BasePoint, XVector, YVector, ZVector, OdBmGDirectContext3D
+GDirectContext3D: Outline, Trf, ApplicationId, HandleId, InstanceId, OdBmGEdge
+GEdge: Faces, Next, Prev, InteriorEdgePnts, FirstAndLastEdgePnts, Flags, OdBmGEdgeLoop
+GEdgeLoop: NextLoop, Face, Next, Prev, Envelope, Open, OdBmGEllipse
+GEllipse: Center, XDirection, YDirection, RadiusX, RadiusY, OdBmGFace
+GFace: FirstLoop, FaceRegions, GFilling, CutType, FaceFlags, RenderStyleId, BackgroundFilling, OdBmGFakeBRep
+GFakeBRep: RecoveryKey, OdBmGFillColorOverrider, Color, IsForeground, OdBmGFillPatternOverrider, FillPatternId, OdBmGFilling, Face, Placer, Data, PatternId, FillColor, Flags, OdBmGFilter, Conditions, IsNestedDetailFamily, OdBmGFlipControl, Origin, Base, OtherBase, Length, OffsetFromOrigin, ArrowStyle, ColorOverride, HasColorOverride, ArrowWidth, OdBmGGTag, ModelTestPoint, UseModelTestPoint, SelectByModelTestPoint, OdBmGGhostSurfacesOverrider, GhostSurfaces, OdBmGGroup
+GGroup: AllSubNodes, OdBmGHermiteSpline
+GHermiteSpline: Periodic, NodeArray, OdBmGImage
+GImage: ImageInfo, OdBmGImposter
+GImposter: Transform, AssetObject, OdBmGInstance
+GInstance: InstanceInfo, EmbeddedSymbolGRep, ForbiddenTarget, ResolveSymInView, HasScale, TagId, OdBmGLine
+GLine: OriginPoint, DirectionVector, OdBmGLinePatternOverrider, LinePatternId, OdBmGLinkFilter, SubNode, OdBmGLink, TargetViewId, TargetSheetId, ViewPortId, OdBmGMaterialOverrider, MaterialId, OdBmGNode
+GNode: GInfo, OdBmGNurbSpline
+GNurbSpline: Degree, Closed, Rational, ControlPoints, Knots, OdBmGOffsetCurve
+GOffsetCurve: BaseCurve, ReferenceVector, SignedOffsetDistance, NaturalDomain, OdBmGPenNumberOverrider, PenNumber, OdBmGPointCloud
+GPointCloud: Outline, PCInfo, ClipFilter, HiliteFilter, OdBmGPoint
+GPoint: Coord, Size, PointFlags, BorderSize, OdBmGPolyCurve
+GPolyCurve: IsFilled, Curves, OdBmGPolyLine
+GPolyLine: Coordinates, Extents, IsFilled, OdBmGPolyMesh
+GPolyMesh: InteriorGStyleID, MaterialID, PolyMeshFlags, FacetedTopology, OdBmGRenderSettings, VisibilityDistance, Resolution, PrintPageWidth, Quality, Lighting, Background, ClrBackground, ScreenResolution, EnvironmentAssets, ExposureAssets, LightScheme, BkImageSettings, CustomQualityAsset, OdBmGRep
+GRep: GeomBBox, ObjectType, GRepFlags, GTightBBox, ElementId, OdBmGRichText, ArrRtfRawData, DefaultFontName, ModelOrigin, ModelXUnitVec, ModelYUnitVec, DefaultFontSize, ModelToSheetScale, BorderOffset, WidthScale, DefaultTabSize, LeftOverhangRatio, RightOverhangRatio, DefaultTextColor, LayoutWidthHimetric, LayoutHeightHimetric, TextHeightHimetric, TextWidthHimetric, TextHorzOffsetHimetric, TextVertOffsetHimetric, DefaultHorizontalTextAlignment, DefaultVerticalTextAlignment, DrawPrehiliteBox, IsDefaultFontBold, IsDefaultFontItalic, IsDefaultFontUnderlined, KeepReadable, TransparentBackground, NoWrapping, PickWithBorderOffset, UseModelVecsIn3D, OdBmGRvtLink
+GRvtLink: InstanceInfo, OdBmGScreenPlacer, GNode, Position, ModelSizeForAdaptiveScaling, PositionControl, OrientationControl, ScaleControl, OdBmGShowLinesOnlyOverrider, ShowLinesOnly, OdBmGStyleColorOverrider

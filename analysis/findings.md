@@ -40,6 +40,35 @@
 | R28 | **子流逻辑层（M3.5）**：class-101 子流头部=deposit 记录区；class-102 头=同 counter 戳异型记录（field2=0xf77f22cb/87[?]）；class-103 头=目录表记录（[类索引 0x821(2023)/0x7df(2022)] + 递增小 id 表项 4..N）；页数据=对象记录流（[u32 counter][u32 size][u32 1398/1340]…反复，1398 出现 600-1000 次/页） | 双样例子流拆分实测 | 观察→推断 | 记录区对象信封=ObjectPtrReader 领域 |
 | R29 | **★R21 重大修正：分区"损坏"呈系统性 +353**——全部可解压异常页的索引长度差恒为 -353（2023: 168 页 -353 + 1 页 -706=2×353；2022: 137 页全部 -353），页脚 CRC/ISIZE 同步陈旧（ISIZE=旧尺寸），而解码输出与正常页结构完全一致（记录流形态、1398 计数正常）且解码不报错。结论：这些页被**原地重写（+353 压缩字节/+2082 解压字节）而索引/页脚未更新**（疑似 Revit 增量保存/deposit 追加行为或写出器缺陷），非随机下载损坏；另 97/68 页 inflate 失败（真损坏或魔数丢失）。解析器保守处理：仅验证页入子流数据，异常页显式报错（含差值） | 双样例全部异常页差值分布统计 + 损坏页数据结构对照 | 观察 | +353 字节内容定位、是否可在干净样例上消除[?] |
 
+## P0/P1 提取轮（rea-extract-plan 驱动）
+
+| ID | 结论 | 证据 | 置信度 | 边界/未知 |
+|---|---|---|---|---|
+| R30 | **★类索引勘误：i16 非 u32**——对象信封类索引 = `OdInt16Reader`（2B signed LE）符号扩展后查 `ClassesContainer::find`；分区实测 `76 05 00 00` 中 `76 05`=1398(OdBmElementHeader)，后两 `00 00` 属对象体首属性 | REA InitReader@0x281db6（0x281e4e 读 i16）+ csv 锚点 | 观察 | — |
+| R31 | **对象信封调用链定案**（01-object-envelope.md）：ObjectPtrReader(薄)→OdBmObjectPtrReader(编排+DynamicQueue)→InitReader(i16 类索引→工厂)→per-class 生成 reader（快）/GenericObjectReader(慢：属性迭代+fieldType 分发)；引用两阶段=IdReference 挂起+initReferences 回填；动态属性段 readDynamicProperties | REA 六层 dossier | 观察 | [counter][size] 记录包装消费点仍在分区子流层[?] |
+| R32 | **fieldType 磁盘格式表**（01-object-envelope.md §2）：1=bool/2=i8/3=i16/4=i32/5=i32/6=f32→f64/7=f64/8=string[布局?]/9=guid16B/10=i16/13=itemMode(0/6 标量,1 定长数组,5 变长)/14=对象引用(递归 i16+体)；跳转表@0x2b78c8；属性无磁盘头（顺序=类元数据）；typeId0x83=u8[] | REA PropertySingleValueReader@0x28358c + GenericObjectReader@0x2811ba | 观察 | String/Guid reader 内部布局（外部库）[?] |
+| R33 | **类索引全表落地**（06-class-index.md + tables/*.csv）：2023=2845 类、2022=2761 类，index↔OdBm* 类名；1398(2023)/1340(2022)=OdBmElementHeader 跨版本重编号证实；**91/102/103 不在类索引空间**（系分区页/子流标签，修正计划 #3 假设）；值类型命名=ElementId/ElementIdPlusIndex/GUIDvalue | nm 生成 reader 符号批量提取 | 观察 | Classes 模块注册表未穷举（Readers 覆盖序列化类） |
+| R34 | **几何存储模型定案（#13 决策）**：文件同时存参数化定义+**BRep 几何缓存树**——`Element.getGeometry`→`OdBmGElement(geometry cache)→GRep→GBrep/GEdge/GLine/GPoint…`；G 族全在类索引空间（GElement=2073、GBrep=2044、GEdge=1301、GLine=1798、GPoint=2098、GeomTable=2155、Geometry=2160）；A3Party*=外部导入容器；go-topo=**转换器读缓存树**，非再生引擎 | E1 BmElement.h:126/648、BmGElement.h、BmGeometry.h、BmGRep.h + csv | 观察→推断（决策） | G* 字段级序列化=下轮 REA |
+| R35 | **ElemTable 布局定案**（02-elemtable.md）：6B 头（magic 0x2054055a）+ 28B×N 记录 `[id,id,0,depA,depB,0,0xffffffff]`；id 可跳号（删除）；depA/depB **非元素类索引**（551/767/822 对 csv 类名不合语义）——路由经 deposit/目录表串联 [?] | 样例 26 条连续+跳号实测 | 观察 | depA/B 语义、头尾字段[?] |
+| R36 | **UnitSystem 定案（#4）**：Metric=0/Imperial=1（E1 BmUnitSystem.h）——表流 FixedFooter u32∈{0,1}；**实例变换**=Instance.getTransform()→OdGeMatrix3d（#15 头文件层）；坐标基准=BasePoint(Project/Shared)+GeoLocation（#16，与 oda-bim-clues R7 三坐标系一致） | E1 三头文件 | 观察 | 盘上字段布局随类信封[?] |
+| R37 | **G 节点类型系统定案（#14a）**：TB_Geometry.tx 每类 propertiesConstructor 内 UTF-32 属性名按注册序提取（=序列化序）——GLine=OriginPoint+DirectionVector、GArc=X/YDir+Radius+Center+IsFilled、GEllipse=Center+X/YDir+RadiusX/Y、GNurbSpline=Degree+Closed+Rational+ControlPoints+Knots、GBrep=Faces、GFace→GEdgeLoop→GEdge 双向链表（InteriorEdgePnts/FirstAndLastEdgePnts）、GRep=GeomBBox/ObjectType/GRepFlags/GTightBBox/ElementId(i64)、GInstance=InstanceInfo+EmbeddedSymbolGRep+…、GRvtLink=InstanceInfo；产物 tables/g-node-properties.txt | objdump lea→UTF-32 串批量提取（29 构造器） | 观察 | 各属性 fieldType/itemMode[?]；GElement 壳构造器属性在别处[?] |
+| R38 | **ElementId 值编码=经 DynamicQueue 的 objectReader**（非裸 u64）：c_valueReader<"ElementId"> lambda 调 objectReader<"ElementId">（队列 IdReference）→OdDbStub→OdBmObjectId；裸 id 宽度在 objectReader/IdReference 内[?] | E2 objdump 0x10b0d9（TB_LoaderBase） | 观察 | 裸 id 宽度、IdReference 磁盘格式[?] |
+| R39 | **总纲落盘**：rvt-format.md（全景+信封契约+几何面+未知优先级）——R1–R38 收口索引 | 本文档集 | 观察 | — |
+| R40 | **+353 页回收规则实用定案**：next_rec=member_start+ownLen−8；失败 span+=353 重试+32KB dict 链+0x0E47 重同步——2023 回收 133 页/14.8MB（+7.6MB）、2022 151 页/19.0MB；逻辑流 /tmp/rvt-partition-*.bin | 双样例恢复 walker | 观察 | 全 1060 页终结器回链[?] |
+| R41 | 签名 64B=**非对称签名块**（非 sha 系内容哈希；RSA-512 尺寸；公钥未见）；串长34 校验 ✓ | 多候选哈希扫描 | 观察→推断 | 算法/公钥[?] |
+| R42 | **ElementId 路由=OdBmDepositId(u64 Handle)×3 三元组**（splitElements/populatePartition/BmIODepositPE）；[counter][size] 字节循环在 PE 平台扩展内 | E1 BmDepositId.h + E2 nm/objdump | 观察 | PE 字节层[?] |
+| R43 | **String=i32 长度+raw 字节；Guid=raw 16B 无前缀**（TB_Common.tx） | E2 objdump 0x29f58/0x29b54 | 观察 | String 编码[?] |
+| R44 | **Variant::Type 用法表**（2=bool/5=i32/6=i64/7=f64/9=对象/13=ElementId/14=托管对象/263=f64[]/265=obj[]/270=链[]）；GInfoFlags 位域全表（E1）；**Formats/Latest=类型反射注册表**（非 ACIS 库）；**ProjectInformation=ZIP→Atom 项目参数 XML** | 构造器批量提取+E1 头+样例 | 观察 | NurbSpline 权重位置[?]；Variant→fieldType 映射[?] |
+
+## M4 实现轮（报告落地 + 字节级新证）
+
+| ID | 结论 | 证据 | 置信度 | 边界/未知 |
+|---|---|---|---|---|
+| R45 | **记录环字节层定案（R42 挂账收口）**：分区子流记录 = `[u32 counter][u32 size][body: size 字节][u32 size echo]`，stride=12+size。**仅 class-101（deposit 件流）成立**：2023 走出 77,251 条（99.95%=1398 OdBmElementHeader）、2022 58,819 条，回收后 walk 覆盖 100%；class-102/103 无此框式（102 头=counter 戳异型块、103=纯目录表，R28/R44 维持）；class-101 亦含少量 **class=0 记录**（无类 deposit 件，counter 正常递增）。真实记录 ≥91B——minRecordSize=16 门 + 同类链门抑制规律数据假链 | Go walker 双样例 100% 覆盖实测（objects.go） | 观察 | class-0 记录语义；偶发 resync 伪记录（39/77251 中约数条）[?] |
+| R46 | **+353 回收落地（R40）**：stale-index 重分类（index 差为 353 倍数且解压成功→StaleIndex，数据入子流）——2023 逻辑流 64.4→**84.7MB**（169 页回收，corrupt 仅剩 2）、2022 53.9→**69.3MB**（137 页，corrupt 0）；unreadable 页不变（97/68，真损坏或魔数丢失） | rvt/partition.go + 双样例测试 | 观察 | 终结器回链扫描（unreadable 区）仍未做 |
+| R47 | **ElemTable↔分区串联键实锤（R35 升级）**：ElemTable 尾部 19B footer 内嵌**分区末条 deposit counter**（2023=1098316，bytes.Contains 验证 ✓）；ElemTable id 域实测 1..1098316（首 id=1，非 R35 所记 26 起——前条目属页内局部序）；8276 条、id/id2 零失配 | m4_real_test 双测试 + footer 字节 | 观察→推断 | id↔counter 全表对拍（待对象信封全解码）；footer [u32 0x8d5] 段语义[?] |
+| R48 | **M4 代码落地**：`rvt/classindex`（两版本 CSV 嵌入+Lookup）、`rvt/objects.go`（记录环 walker+类普查）、`rvt/elemtable.go`（6B 头+28B 记录）、`rvt/partition.go`（stale 回收+walk 集成+ReadPartitionWithLookup）、`rvt/rvt.go`（ElemTable/UnitSystem/ProjectEntries 元数据）；rvtinfo JSON 全暴露；合成+真样例测试全绿 | 本仓库 M4 提交 | 观察 | — |
+
 ## 关键未知（队列）
 
 - U-R1 `62 19 22 05` 帧头字段语义

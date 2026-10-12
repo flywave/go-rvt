@@ -80,6 +80,7 @@ func buildSyntheticPartition(t *testing.T) []byte {
 	var p0 bytes.Buffer
 	p0.Write(depositRec(1000))
 	p0.Write(depositRec(1001))
+	p0.Write(objRec(5000, 1398, bytes.Repeat([]byte{0x77}, 40)))
 	p0.Write(bytes.Repeat([]byte{0x55}, 300))
 	m0 := gzmem(t, p0.Bytes())
 	s.Write(recBytes(0, 0, 0x0e4e, 4, 1, uint32(len(m0)+8), 0, 101, 0))
@@ -151,11 +152,11 @@ func TestPartitionSynthetic(t *testing.T) {
 	}
 	wantClass := []uint32{101, 102, 103}
 	for i, ss := range info.SubStreams {
-		if ss.Class != wantClass[i] || ss.Pages != 1 || ss.VerifiedPages != 1 {
+		if ss.Class != wantClass[i] || ss.Pages != 1 || ss.DataPages != 1 {
 			t.Errorf("sub-stream %d: %+v", i, ss)
 		}
 	}
-	if ss := info.SubStreams[0]; ss.LogicalBytes != 2*103+300 {
+	if ss := info.SubStreams[0]; ss.LogicalBytes != 2*103+54+300 {
 		t.Errorf("class101 logical %d", ss.LogicalBytes)
 	}
 	if info.DepositCount != 2 || info.FirstCounter != 1000 || info.LastCounter != 1001 {
@@ -179,6 +180,14 @@ func TestPartitionSynthetic(t *testing.T) {
 	// sub-stream data check: class 101 data starts with the deposit records
 	if !bytes.HasPrefix(p.SubStreams[0].Data, depositRec(1000)) {
 		t.Error("class101 data does not start with deposit 1000")
+	}
+	// object-record walk ran on the deposit-bearing sub-stream
+	if len(p.SubStreams[0].Records) != 1 {
+		t.Fatalf("records %d (want 1)", len(p.SubStreams[0].Records))
+	}
+	r := p.SubStreams[0].Records[0]
+	if r.Counter != 5000 || r.ClassIndex != 1398 {
+		t.Errorf("record %+v", r)
 	}
 }
 
@@ -213,7 +222,7 @@ func TestPartitionSyntheticCorrupt(t *testing.T) {
 			ss103 = &info.SubStreams[i]
 		}
 	}
-	if ss103 == nil || ss103.VerifiedPages != 1 {
+	if ss103 == nil || ss103.DataPages != 1 {
 		t.Errorf("class103 after corruption: %+v", ss103)
 	}
 	if len(info.PageErrors) == 0 {
@@ -251,8 +260,11 @@ func TestM3Partitions(t *testing.T) {
 			if pi.MarkA == 0 || pi.MarkB == 0 {
 				t.Errorf("%s: partition %s markers %04x/%04x", path, pi.Name, pi.MarkA, pi.MarkB)
 			}
-			if pi.VerifiedPages < 700 {
-				t.Errorf("%s: partition %s verified pages %d", path, pi.Name, pi.VerifiedPages)
+			if pi.VerifiedPages+pi.StaleIndexPages < 700 {
+				t.Errorf("%s: partition %s verified %d + stale %d pages", path, pi.Name, pi.VerifiedPages, pi.StaleIndexPages)
+			}
+			if pi.StaleIndexPages == 0 {
+				t.Errorf("%s: partition %s expected stale-index recoveries (R29/R40)", path, pi.Name)
 			}
 			if pi.LogicalBytes < 50_000_000 {
 				t.Errorf("%s: partition %s logical %d", path, pi.Name, pi.LogicalBytes)
@@ -271,26 +283,26 @@ func TestM3Partitions(t *testing.T) {
 			if len(pi.SubStreams) != 3 {
 				t.Errorf("%s: partition %s sub-streams %d", path, pi.Name, len(pi.SubStreams))
 			}
-			var sumVerified int
+			var sumData int
 			for _, ss := range pi.SubStreams {
-				sumVerified += ss.VerifiedPages
+				sumData += ss.DataPages
 			}
-			if sumVerified != pi.VerifiedPages {
-				t.Errorf("%s: partition %s sub-stream verified %d != %d", path, pi.Name, sumVerified, pi.VerifiedPages)
+			if sumData != pi.VerifiedPages+pi.StaleIndexPages {
+				t.Errorf("%s: partition %s sub-stream data pages %d != %d", path, pi.Name, sumData, pi.VerifiedPages+pi.StaleIndexPages)
 			}
 			// deposits on the first sub-stream (both versions have them;
 			// 2022 counters do not step +1 — findings R24/R26)
 			if pi.DepositCount == 0 {
 				t.Errorf("%s: partition %s no deposits", path, pi.Name)
 			}
-			t.Logf("%s: partition %s markA=%04x markB=%04x field8=%d pages=%d verified=%d corrupt=%d unreadable=%d spurious=%d sigs=%d logical=%d deposits=%d counters=%d..%d errors=%d",
+			t.Logf("%s: partition %s markA=%04x markB=%04x field8=%d pages=%d verified=%d stale=%d corrupt=%d unreadable=%d spurious=%d sigs=%d logical=%d deposits=%d counters=%d..%d errors=%d",
 				path, pi.Name, pi.MarkA, pi.MarkB, pi.HeaderField8, pi.Pages, pi.VerifiedPages,
-				pi.CorruptDataPages, pi.UnreadablePages, pi.SpuriousMagics,
+				pi.StaleIndexPages, pi.CorruptDataPages, pi.UnreadablePages, pi.SpuriousMagics,
 				pi.SignatureRecords, pi.LogicalBytes, pi.DepositCount, pi.FirstCounter, pi.LastCounter,
 				len(pi.PageErrors))
 			for _, ss := range pi.SubStreams {
-				t.Logf("   sub-stream class=%d pages=%d verified=%d logical=%d deposits=%d counters=%d..%d",
-					ss.Class, ss.Pages, ss.VerifiedPages, ss.LogicalBytes, ss.Deposits, ss.FirstCounter, ss.LastCounter)
+				t.Logf("   sub-stream class=%d pages=%d data=%d logical=%d deposits=%d records=%d counters=%d..%d classes=%v",
+					ss.Class, ss.Pages, ss.DataPages, ss.LogicalBytes, ss.Deposits, ss.Records, ss.FirstCounter, ss.LastCounter, ss.Classes)
 			}
 			errKinds := map[string]int{}
 			for _, e := range pi.PageErrors {
