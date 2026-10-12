@@ -230,3 +230,51 @@ func TestArcsRealSamples(t *testing.T) {
 	a := m.Arcs[0]
 	t.Logf("sample arc: R=%.4f C=(%.4f,%.4f,%.4f)", a.Radius, a.Center.X, a.Center.Y, a.Center.Z)
 }
+
+// TestKeyedBinding validates element attribution of curves/arcs (R77).
+func TestKeyedBinding(t *testing.T) {
+	data, err := os.ReadFile(samples[0])
+	if err != nil {
+		t.Skip("no sample")
+	}
+	f, _ := OpenCFB(data)
+	raw, _ := f.Stream("Partitions/13")
+	lookup := func(cls int16) string {
+		name, _ := classindex.Lookup("2023", cls)
+		return name
+	}
+	part, err := ReadPartitionWithLookup("13", raw, lookup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := part.Model("2023")
+	t.Logf("bound curves: %d, bound arcs: %d", len(m.BoundCurves), len(m.BoundArcs))
+	if len(m.BoundCurves) == 0 {
+		t.Fatal("no bound curves")
+	}
+	// element ids must exist in the element set
+	elSet := map[uint32]bool{}
+	for _, e := range m.Elements {
+		elSet[e.ID] = true
+	}
+	boundToKnown := 0
+	for _, b := range m.BoundCurves {
+		if elSet[b.ElementID] {
+			boundToKnown++
+		}
+	}
+	t.Logf("curves bound to known elements: %d/%d", boundToKnown, len(m.BoundCurves))
+	if boundToKnown == 0 {
+		t.Error("no curves bound to known elements")
+	}
+	// distinct element count
+	distinct := map[uint32]bool{}
+	for _, b := range m.BoundCurves {
+		distinct[b.ElementID] = true
+	}
+	t.Logf("distinct elements with curves: %d", len(distinct))
+	// sample
+	b := m.BoundCurves[0]
+	t.Logf("sample: element %d line (%.5f,%.5f,%.5f)->(%.5f,%.5f,%.5f)",
+		b.ElementID, b.Origin.X, b.Origin.Y, b.Origin.Z, b.Direction.X, b.Direction.Y, b.Direction.Z)
+}

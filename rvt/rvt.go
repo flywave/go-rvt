@@ -194,8 +194,10 @@ func Open(data []byte) (*Metadata, error) {
 			BReps:    len(m.BReps),
 			GTrees:   len(m.Trees),
 			WithBBox: withBBox,
-			Curves:   len(m.Curves),
-			Arcs:     len(m.Arcs),
+			Curves:      len(m.Curves),
+			Arcs:        len(m.Arcs),
+			BoundCurves: len(m.BoundCurves),
+			BoundArcs:   len(m.BoundArcs),
 		}
 	}
 	sort.Slice(md.Partitions, func(i, j int) bool { return md.Partitions[i].Name < md.Partitions[j].Name })
@@ -262,4 +264,6 @@ type ModelSummary struct {
 	WithBBox int `json:"with_bbox,omitempty"`
 	Curves   int `json:"curves,omitempty"`
 	Arcs     int `json:"arcs,omitempty"`
+	BoundCurves int `json:"bound_curves,omitempty"`
+	BoundArcs   int `json:"bound_arcs,omitempty"`
 }

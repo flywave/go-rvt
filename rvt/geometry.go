@@ -389,3 +389,123 @@ func ScanGArcs(data []byte) []geom.Arc {
 	}
 	return out
 }
+
+// KeyedBinding (findings R77): attributes inline geometry objects to
+// elements via the nearest-preceding element-counter key occurrence in the
+// class-102 store (R72: element-counter keyed blocks exist; key vs data
+// contexts are disambiguated by requiring the counter to also exist in the
+// class-101 record counter set).
+type KeyedBinding struct {
+	ElementID uint32 `json:"element_id"`
+	Offset    int    `json:"-"`
+}
+
+// KeyPositions returns the sorted offsets where any of the given counters
+// occurs (4-byte aligned) in data.
+func KeyPositions(data []byte, counters map[uint32]bool) []KeyedBinding {
+	var out []KeyedBinding
+	for off := 0; off+4 <= len(data); off += 4 {
+		c := binary.LittleEndian.Uint32(data[off:])
+		if counters[c] {
+			out = append(out, KeyedBinding{ElementID: c, Offset: off})
+		}
+	}
+	return out
+}
+
+// bindElementID returns the element of the nearest key at or before off.
+func bindElementID(keys []KeyedBinding, off int) (uint32, bool) {
+	i := sort.Search(len(keys), func(i int) bool { return keys[i].Offset > off })
+	if i == 0 {
+		return 0, false
+	}
+	return keys[i-1].ElementID, true
+}
+
+// ScanGLinesKeyed collects inline GLine objects with element attribution.
+func ScanGLinesKeyed(data []byte, gLine int16, keys []KeyedBinding) []geom.BoundLine {
+	var out []geom.BoundLine
+	for off := 0; off+6+48 <= len(data); off += 2 {
+		if int16(binary.LittleEndian.Uint16(data[off:])) != gLine {
+			continue
+		}
+		if binary.LittleEndian.Uint32(data[off+2:]) != 0 {
+			continue
+		}
+		var f [6]float64
+		finite := true
+		nonzero := false
+		for k := 0; k < 6; k++ {
+			f[k] = math.Float64frombits(binary.LittleEndian.Uint64(data[off+6+k*8:]))
+			if math.IsNaN(f[k]) || math.IsInf(f[k], 0) || math.Abs(f[k]) > 1e6 {
+				finite = false
+				break
+			}
+			if f[k] != 0 {
+				nonzero = true
+			}
+		}
+		if !finite || !nonzero {
+			continue
+		}
+		dx, dy, dz := f[3]-f[0], f[4]-f[1], f[5]-f[2]
+		if math.Abs(dx)+math.Abs(dy)+math.Abs(dz) < 1e-9 {
+			continue
+		}
+		elID, hasEl := bindElementID(keys, off)
+		if !hasEl {
+			continue
+		}
+		out = append(out, geom.BoundLine{
+			ElementID: elID,
+			Line: geom.Line{
+				Origin:    geom.Point3{X: f[0], Y: f[1], Z: f[2]},
+				Direction: geom.Point3{X: f[3], Y: f[4], Z: f[5]},
+			},
+		})
+	}
+	return out
+}
+
+// ScanGArcsKeyed collects content-anchored arcs with element attribution.
+func ScanGArcsKeyed(data []byte, keys []KeyedBinding) []geom.BoundArc {
+	var out []geom.BoundArc
+	for off := 0; off+80 <= len(data); off += 2 {
+		var f [10]float64
+		ok := true
+		for k := 0; k < 10; k++ {
+			f[k] = math.Float64frombits(binary.LittleEndian.Uint64(data[off+k*8:]))
+			if math.IsNaN(f[k]) || math.IsInf(f[k], 0) {
+				ok = false
+				break
+			}
+		}
+		if !ok {
+			continue
+		}
+		xm := math.Sqrt(f[0]*f[0] + f[1]*f[1] + f[2]*f[2])
+		ym := math.Sqrt(f[3]*f[3] + f[4]*f[4] + f[5]*f[5])
+		dot := f[0]*f[3] + f[1]*f[4] + f[2]*f[5]
+		if xm < 0.99 || xm > 1.01 || ym < 0.99 || ym > 1.01 || math.Abs(dot) > 0.01 {
+			continue
+		}
+		if f[6] <= 1e-6 || f[6] > 1e4 {
+			continue
+		}
+		elID, hasEl := bindElementID(keys, off)
+		if !hasEl {
+			continue
+		}
+		out = append(out, geom.BoundArc{
+			ElementID: elID,
+			Arc: geom.Arc{
+				XDir:   geom.Point3{X: f[0], Y: f[1], Z: f[2]},
+				YDir:   geom.Point3{X: f[3], Y: f[4], Z: f[5]},
+				Radius: f[6],
+				Center: geom.Point3{X: f[7], Y: f[8], Z: f[9]},
+			},
+		})
+		off += 78
+	}
+	return out
+}

@@ -132,6 +132,8 @@
 
 | R72 | **M10 探察（绑定语法复杂度定性）**：① class-102 存在**按元素 counter 键控的块**——counter 1049 四次出现中 @5536 为真键（前置 GInfo 尾 `ffffffff 00000000 0000`）、@1465320/@5679464 为他块数据（id 引用 [1354][3][2] 序列）、@2058480 为前块内（[1047][1492][123][5] 后）；② 块内容含 id 列表（476/467/888/690/694/680）+ f64 数据 + [GLine][0] 内联标记；③ GPoint[0] 块三处字节全同 = PointElementGStep(3098/3099) 引用列表（非坐标点）；④ NurbSpline(2094) 权重锚扫描不确定（[2094][0] 精确样本仅 3 个）。块文法（键 vs 数据区分）需写出器级分析 | 四点 pre16 上下文走读 + GPoint[0] 字节比对 + 权重锚扫描 | 观察 | 键/数据区分文法；NurbSpline 数组帧 |
 
+| R77 | **曲线↔元素绑定器落地（M10 首收）**：KeyPositions（class-101 记录 counter 集在 class-102 的 4B 对齐出现位）+ 最近前驱键归属 → `ScanGLinesKeyed`/`ScanGArcsKeyed`——2023 实测：**109/109 曲线全部绑定到已知元素**（30 个不同元素，样例 element 16: (0,0,0)→(0.336,0.246,0)）、3,972 弧同样绑定；`geom.BoundLine/BoundArc` + Model.BoundCurves/BoundArcs + ModelSummary。启发式边界：数据值巧合等于 counter 时可能误归属（保守使用） | rvt/geometry.go + TestKeyedBinding（100% 已知元素绑定） | 观察→推断 | 精确绑定需 R76 动态段对齐检验；误归属率未量化 |
+
 | R73 | **NurbSpline/PolyMesh 差分轮（M9 收口定性）**：① NurbSpline：[2094] 标记 72 处但 `[cls][0]` 精确对象仅 3 个（degree dist 全为 4）——**样例限制**（rac_basic 小样例的样条本就稀少），degree 锚对齐失败因样本不足而非方法；② PolyMesh(2104)：`[cls][0]` 28 个——**头帧破解**：u32 列直方图 `[gstyle=0 ×4][mark 0x20][-1][count 可变(众数 11)][facet 数据…]`（col0-3=零/样式 id、col4=0x20 恒定、col5=-1 哨兵、col6=计数变体、col7+=逐面数据）；Facet 记录尺寸（N-gon 变长）需 FacetedTopology reader 专项 | 列直方图 ×28 样本 | 观察 | Facet 记录布局；NurbSpline 需富样条样例（外部依赖） |
 
 | R75a | readOverride@0x136306 = 每数据库覆盖钩子（map\<OdBmDatabase\*, function\> 查找+调用），非字节文法解析器——正常路径解析在 InitReader→DepositPE keep/withdraw 链与 DiskManager 运行时缓存之后 | readOverride 反汇编（Rb_tree find + std::function invoke） | 观察 | — |

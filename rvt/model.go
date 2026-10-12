@@ -19,6 +19,10 @@ type Model struct {
 	Trees    []geom.GTree
 	Curves   []geom.Line
 	Arcs     []geom.Arc
+	// Bound geometry: instances attributed to elements via the
+	// element-counter keyed block contexts (R72/R77).
+	BoundCurves []geom.BoundLine
+	BoundArcs   []geom.BoundArc
 }
 
 // geometrySubStreamClass is the class-103 page tag (both samples).
@@ -56,10 +60,22 @@ func (p *Partition) Model(version string) *Model {
 			}
 		}
 		if store != nil {
+			// element-counter key positions for attribution (R77)
+			keySet := map[uint32]bool{}
+			for _, ss := range p.SubStreams {
+				if len(ss.Deposits) > 0 {
+					for i := range ss.Records {
+						keySet[ss.Records[i].Counter] = true
+					}
+				}
+			}
+			keys := KeyPositions(store.Data, keySet)
 			if gl, ok := classindex.Index(version, "OdBmGLine"); ok {
 				m.Curves = ScanGLines(store.Data, int16(gl))
+				m.BoundCurves = ScanGLinesKeyed(store.Data, int16(gl), keys)
 			}
 			m.Arcs = ScanGArcs(store.Data)
+			m.BoundArcs = ScanGArcsKeyed(store.Data, keys)
 		}
 		gEl, ok := classindex.Index(version, "OdBmGElement")
 		if ok {

@@ -145,3 +145,16 @@ type GTree struct {
 	BBoxes  []BBox `json:"bboxes,omitempty"`
 	Refs    []GRef `json:"refs,omitempty"`
 }
+
+// BoundLine is a GLine instance attributed to its owning element (R77
+// nearest-preceding-key attribution over element-counter keyed blocks).
+type BoundLine struct {
+	ElementID uint32 `json:"element_id"`
+	Line
+}
+
+// BoundArc is an arc instance attributed to its owning element.
+type BoundArc struct {
+	ElementID uint32 `json:"element_id"`
+	Arc
+}
