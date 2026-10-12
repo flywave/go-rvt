@@ -123,3 +123,65 @@ func GMarkerCensus(data []byte, lookup func(int16) string) []ClassCount {
 	sort.Slice(out, func(i, j int) bool { return out[i].Count > out[j].Count })
 	return out
 }
+
+// GCatalogRun is one detected run of 6-byte G-database catalog entries
+// [i16 class][u32 id] with consecutively increasing ids (findings R56).
+// The class-103 geometry region catalogs its G nodes this way — e.g. a
+// GBrep's Faces and Edges appear as interleaved Face/Edge id sequences.
+type GCatalogRun struct {
+	Offset    int    `json:"offset"`
+	Class     int16  `json:"class"`
+	ClassName string `json:"class_name,omitempty"`
+	Entries   int    `json:"entries"`
+	FirstID   uint32 `json:"first_id"`
+	LastID    uint32 `json:"last_id"`
+}
+
+// minGCatalogRun is the minimum run length worth reporting (noise gate).
+const minGCatalogRun = 4
+
+// maxGCatalogID filters float-noise false positives (real G-node ids on the
+// samples stay below ~1e3; misread f64 pairs produce ~1e9 values).
+const maxGCatalogID = 1 << 20
+
+// ScanGCatalogRuns scans data from `from` for catalog runs and returns runs
+// of at least minGCatalogRun entries.
+func ScanGCatalogRuns(data []byte, from int, lookup func(int16) string) []GCatalogRun {
+	var runs []GCatalogRun
+	off := from
+	for off+6 <= len(data) {
+		cls := int16(binary.LittleEndian.Uint16(data[off:]))
+		name := lookup(cls)
+		if name == "" {
+			off += 2
+			continue
+		}
+		n := 0
+		pos := off
+		prev := int64(binary.LittleEndian.Uint32(data[off+2:])) - 1
+		for pos+6 <= len(data) {
+			c2 := int16(binary.LittleEndian.Uint16(data[pos:]))
+			i2 := int64(binary.LittleEndian.Uint32(data[pos+2:]))
+			if lookup(c2) == "" || i2 != prev+1 || i2 < 0 || i2 > maxGCatalogID {
+				break
+			}
+			prev = i2
+			pos += 6
+			n++
+		}
+		if n >= minGCatalogRun {
+			runs = append(runs, GCatalogRun{
+				Offset:    off,
+				Class:     cls,
+				ClassName: name,
+				Entries:   n,
+				FirstID:   uint32(prev - int64(n) + 1),
+				LastID:    uint32(prev),
+			})
+			off = pos
+			continue
+		}
+		off += 2
+	}
+	return runs
+}

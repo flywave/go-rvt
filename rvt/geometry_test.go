@@ -122,3 +122,45 @@ func TestGeometryIndexRealSamples(t *testing.T) {
 		t.Skip("no .rvt samples")
 	}
 }
+
+// TestGCatalogRunsReal detects the G-database catalog layer in the class-103
+// geometry region (findings R56): [i16 class][u32 id] runs — including the
+// Face/Edge sequences of BRep structures.
+func TestGCatalogRunsReal(t *testing.T) {
+	data, err := os.ReadFile(samples[0])
+	if err != nil {
+		t.Skip("no sample")
+	}
+	f, _ := OpenCFB(data)
+	b, _ := f.Stream("Partitions/13")
+	p, _ := ReadPartition("13", b)
+	var geo *SubStream
+	for _, ss := range p.SubStreams {
+		if ss.Class == 103 {
+			geo = ss
+		}
+	}
+	lookup := func(cls int16) string {
+		name, _ := classindex.Lookup("2023", cls)
+		return name
+	}
+	gi := ParseGeometryIndex(geo.Data)
+	runs := ScanGCatalogRuns(geo.Data, gi.DataOffset, lookup)
+	if len(runs) < 10 {
+		t.Fatalf("only %d catalog runs", len(runs))
+	}
+	// BRep topology catalogs use the non-G OdBmFace(1649)/OdBmEdge(1300)
+	hasFace, hasEdge := false, false
+	for _, r := range runs {
+		if r.ClassName == "OdBmFace" {
+			hasFace = true
+		}
+		if r.ClassName == "OdBmEdge" {
+			hasEdge = true
+		}
+	}
+	t.Logf("catalog runs: %d (face=%v edge=%v); first 6: %+v", len(runs), hasFace, hasEdge, runs[:6])
+	if !hasFace || !hasEdge {
+		t.Errorf("expected Face and Edge catalog sequences (BRep topology)")
+	}
+}

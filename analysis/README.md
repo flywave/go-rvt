@@ -69,6 +69,11 @@ go-dgn 侧仅保留指引（`go-dgn/analysis/04-rvt/README.md`）。
    ParseGeometryIndex/GMarkerCensus；G* reader schema 链提取
    （GNode/GRep/GElement/GPoint/GLine/GBrep/GEdge/GEdgeLoop，R54）
    - 未竟：OBJREF 目标类 schema（Coord/bbox/GInfo）；G 对象逐个定界解码
+8. ✅ **M5.5 G 数据库目录层（已落地，第 7 轮探针）**：class-103 G 区的 6B 像目
+   `[i16 class][u32 id]` 层扫通（2023: 2,238 像）——**BRep 拓扑以
+   OdBmFace/OdBmEdge 交替 id 序列目录化**；GElement 组按 deposit counter 键控；
+   Geometry(2160) 内联 f64 bbox（英尺）；`rvt/geometry.go` ScanGCatalogRuns
+   - 未竟：像目→对象 blob 指向；OBJREF 目标类；G 对象完整解码
 
 ## 包结构
 
