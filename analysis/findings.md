@@ -134,6 +134,8 @@
 
 | R73 | **NurbSpline/PolyMesh 差分轮（M9 收口定性）**：① NurbSpline：[2094] 标记 72 处但 `[cls][0]` 精确对象仅 3 个（degree dist 全为 4）——**样例限制**（rac_basic 小样例的样条本就稀少），degree 锚对齐失败因样本不足而非方法；② PolyMesh(2104)：`[cls][0]` 28 个——**头帧破解**：u32 列直方图 `[gstyle=0 ×4][mark 0x20][-1][count 可变(众数 11)][facet 数据…]`（col0-3=零/样式 id、col4=0x20 恒定、col5=-1 哨兵、col6=计数变体、col7+=逐面数据）；Facet 记录尺寸（N-gon 变长）需 FacetedTopology reader 专项 | 列直方图 ×28 样本 | 观察 | Facet 记录布局；NurbSpline 需富样条样例（外部依赖） |
 
+| R75 | **★R42 重大修正：deposit 写出器就在 TB_Loader.tx**——`BmIODepositPE.cpp` 编译单元完整存在（_GLOBAL__sub_I_BmIODepositPE.cpp、ioDepositPE 静例 @0x19c300）：OdBmIODepositPE 全方法（keepStream/keepStreamImpl×2/readOverride/writeOverride/setOverrides/withdraw/withdrawStreamImpl/keep/nextId/assignContext）+ **OdBmDiskManager** 存储层（read(id)/write(stream,id)/fileStream：map<id,deposit> Rb_tree 查找 + 文件流 seek/read——运行时缓存层）。绑定文法的 REA 目标已定位，不再是外部依赖 | nm TB_Loader + keepStreamImpl@0x13559e→DiskManager::write@0x946b2 + read@0x94444 反汇编 | 观察 | deposit 记录字节文法仍需逐函数分析（readOverride@0x136306 为下轮入口） |
+
 | R74 | **PolyMesh=占位网格定性（Facet 问题关闭）**：① FacetedTopology **无独立生成 reader**（不在 Index4Enum 序列化空间，TB_Format2023Readers 无符号）——Facet 布局不可经 reader 反汇编获得；② PolyMesh(2104) reader 序 = CondInt16→i32 PolyMeshFlags→ElementId InteriorGStyleID→ElementId MaterialID（FacetedTopology 经 vcall/通用路径）；③ **2023 样例 28 个 PolyMesh[0] 块的顶点区全零+NaN 混杂 = 空占位网格**（无真实 Facet 数据可解）——Facet 布局解锁需含真实网格的样例（外部依赖，与 NurbSpline 同类） | PolyMesh::read@0xfafd80 反汇编 + 顶点区 f64 探针（全零/NaN） | 观察 | 真实网格样例（外部依赖） |
 
 ## M8 对象模型声明轮
