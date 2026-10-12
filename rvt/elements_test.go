@@ -213,26 +213,79 @@ func TestDynamicFraming(t *testing.T) {
 				hdr = ss
 			}
 		}
-		scalar, envelope := 0, 0
+		// Framing = structural (ExtendedTail false => the 4B-value + 3B-pad
+		// layout holds); TailKind is a value-semantics label, not framing.
+		scalar, extended := 0, 0
 		for i := range hdr.Records {
 			h, err := DecodeElementHeader(hdr.Records[i].Body, lookup)
 			if err != nil {
 				continue
 			}
-			if h.EnvelopeTail {
-				envelope++
+			if h.ExtendedTail {
+				extended++
 			} else {
 				scalar++
 			}
 		}
-		total := scalar + envelope
+		total := scalar + extended
 		if scalar*100 < total*90 {
-			t.Errorf("%s: scalar framing only %d/%d", path, scalar, total)
+			t.Errorf("%s: 4B framing only %d/%d", path, scalar, total)
 		}
-		t.Logf("%s: dynamic framing scalar=%d envelope=%d (%.1f%% scalar)",
-			path, scalar, envelope, 100*float64(scalar)/float64(total))
+		t.Logf("%s: dynamic framing 4B=%d extended=%d (%.1f%%)",
+			path, scalar, extended, 100*float64(scalar)/float64(total))
 	}
 	if found == 0 {
 		t.Skip("no .rvt samples")
+	}
+}
+
+// TestTailClassification validates the extended-tail classifier (R64):
+// DBViewPlan records carry element-id runs; FamilySymbol records carry
+// f64 coordinate arrays.
+func TestTailClassification(t *testing.T) {
+	data, err := os.ReadFile(samples[0])
+	if err != nil {
+		t.Skip("no sample")
+	}
+	f, _ := OpenCFB(data)
+	raw, _ := f.Stream("Partitions/13")
+	lookup := func(cls int16) string {
+		name, _ := classindex.Lookup("2023", cls)
+		return name
+	}
+	part, err := ReadPartitionWithLookup("13", raw, lookup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hdr *SubStream
+	for _, ss := range part.SubStreams {
+		if len(ss.Deposits) > 0 {
+			hdr = ss
+		}
+	}
+	kinds := map[string]map[string]int{} // className -> tailKind -> count
+	for i := range hdr.Records {
+		h, err := DecodeElementHeader(hdr.Records[i].Body, lookup)
+		if err != nil {
+			continue
+		}
+		if kinds[h.ClassName] == nil {
+			kinds[h.ClassName] = map[string]int{}
+		}
+		kinds[h.ClassName][h.TailKind]++
+	}
+	dbp, _ := classindex.Index("2023", "OdBmDBViewPlan")
+	fs, _ := classindex.Index("2023", "OdBmFamilySymbol")
+	dbpName, fsName := lookup(int16(dbp)), lookup(int16(fs))
+	t.Logf("DBViewPlan tails: %v", kinds[dbpName])
+	t.Logf("FamilySymbol tails: %v", kinds[fsName])
+	// Most DBViewPlan/FamilySymbol records are small (view/style settings);
+	// the LARGE members carry the interesting payloads — at least one of
+	// each must classify as an id run / f64 coordinate array.
+	if k := kinds[dbpName]; k[TailIDRun] == 0 {
+		t.Errorf("no DBViewPlan record classified as %s (member-id list): %v", TailIDRun, k)
+	}
+	if k := kinds[fsName]; k[TailFloat64s] == 0 {
+		t.Errorf("no FamilySymbol record classified as %s (coordinates): %v", TailFloat64s, k)
 	}
 }

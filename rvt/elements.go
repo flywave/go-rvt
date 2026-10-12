@@ -3,6 +3,7 @@ package rvt
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
 	"sort"
 )
 
@@ -49,13 +50,15 @@ type ElementHeader struct {
 	HeadBytes    int `json:"head_bytes"`    // static bytes consumed (incl. CondInt16s)
 	DynamicBytes int `json:"dynamic_bytes"` // undecoded token-section size
 
-	// Dynamic section (findings R63): after the 60B static head the body
-	// carries n 4-byte queued values followed by a 3-byte zero pad —
+	// Dynamic section (findings R63/R64): after the 60B static head the
+	// body carries n 4-byte queued values followed by a 3-byte zero pad —
 	// n = (size-63)/4. ~98% (2023) / ~94% (2022) of records fit this pure
-	// 4B framing; the rest contain lazy-object envelopes ([i16 class]
-	// [fields] — R57) and are flagged EnvelopeTail with raw bytes only.
+	// 4B framing (TailScalars). The rest carry per-class extended data
+	// (R64): element-id sequences (DBViewPlan view members), f64 coordinate
+	// arrays (FamilySymbol), etc — classified into TailKind.
 	DynamicValues []uint32 `json:"dynamic_values,omitempty"` // raw 4B values (int or float bits)
-	EnvelopeTail  bool     `json:"envelope_tail,omitempty"`  // tail breaks the 4B framing
+	TailKind      string   `json:"tail_kind,omitempty"`      // scalars | ids | floats64 | mixed
+	ExtendedTail  bool     `json:"extended_tail,omitempty"`  // tail breaks the pure-4B framing
 }
 
 // DecodeElementHeader decodes the static head of an OdBmElementHeader body
@@ -112,18 +115,120 @@ func DecodeElementHeader(body []byte, lookup func(int16) string) (*ElementHeader
 	}
 	h.HeadBytes = pos
 	h.DynamicBytes = len(body) - pos
-	// Dynamic 4B-value framing (R63): values start at HeadBytes, 3B zero
-	// pad before the size echo.
-	if rest := len(body) - h.HeadBytes - 3; rest >= 0 && rest%4 == 0 {
-		n := rest / 4
+	// Dynamic section (R63/R64)
+	tail := body[h.HeadBytes : len(body)-3]
+	if len(tail) >= 0 && len(body) >= h.HeadBytes+3 && (len(body)-h.HeadBytes-3)%4 == 0 {
+		n := len(tail) / 4
 		h.DynamicValues = make([]uint32, n)
 		for k := 0; k < n; k++ {
-			h.DynamicValues[k] = binary.LittleEndian.Uint32(body[h.HeadBytes+k*4:])
+			h.DynamicValues[k] = binary.LittleEndian.Uint32(tail[k*4:])
 		}
+		h.TailKind = classifyTailValues(h.DynamicValues)
 	} else {
-		h.EnvelopeTail = true
+		h.ExtendedTail = true
+		h.TailKind = ClassifyExtendedTail(body[h.HeadBytes:])
 	}
 	return h, nil
+}
+
+// TailKind values.
+const (
+	TailScalars  = "scalars"  // uniform 4B values (queued defaults/params)
+	TailIDRun    = "ids"      // element-id sequence (e.g. DBViewPlan members)
+	TailFloat32s = "floats32" // f32 parameter array
+	TailFloat64s = "floats64" // f64 coordinate/parameter array
+	TailMixed    = "mixed"
+)
+
+// maxElementID bounds id-run detection (2023 ElemTable ids reach 1098316).
+const maxElementID = 1 << 24
+
+// f32Plausible: zero or a sane magnitude (style/param floats, not pointers).
+func f32Plausible(v uint32) bool {
+	f := math.Float32frombits(v)
+	return f == 0 || (math.Abs(float64(f)) < 1e6 && math.Abs(float64(f)) > 1e-9)
+}
+
+func f64Plausible(v uint64) bool {
+	f := math.Float64frombits(v)
+	return f == 0 || (math.Abs(f) < 1e6 && math.Abs(f) > 1e-9)
+}
+
+// classifyTailValues names a pure-4B dynamic section by value fractions.
+func classifyTailValues(vals []uint32) string {
+	if len(vals) == 0 {
+		return TailScalars
+	}
+	ids, f32s := 0, 0
+	for _, v := range vals {
+		if v >= 1 && v <= maxElementID {
+			ids++
+		}
+		if f32Plausible(v) {
+			f32s++
+		}
+	}
+	n := len(vals)
+	switch {
+	case ids >= n*4/5:
+		return TailIDRun
+	case f32s >= n*4/5:
+		return TailFloat32s
+	default:
+		return TailScalars
+	}
+}
+
+// ClassifyExtendedTail heuristically names non-4B-uniform tails (R64):
+// element-id runs (may start 2 bytes in) vs f64 coordinate arrays vs
+// unknown mixtures.
+func ClassifyExtendedTail(tail []byte) string {
+	n4 := len(tail) / 4
+	if n4 == 0 {
+		return TailScalars
+	}
+	// id runs may start 2 bytes in (short prefix before the id list)
+	idFrac := 0.0
+	for _, start := range []int{0, 2} {
+		ids, samples := 0, 0
+		for k := start; k+4 <= len(tail); k += 4 {
+			v := binary.LittleEndian.Uint32(tail[k:])
+			samples++
+			if v >= 1 && v <= maxElementID {
+				ids++
+			}
+		}
+		if samples > 0 {
+			if fr := float64(ids) / float64(samples); fr > idFrac {
+				idFrac = fr
+			}
+		}
+	}
+	// f64 fraction: try 4-byte start offsets, keep the best
+	best := 0.0
+	for start := 0; start < 4 && start < len(tail); start++ {
+		ok, samples := 0, 0
+		for k := start; k+8 <= len(tail); k += 8 {
+			v := binary.LittleEndian.Uint64(tail[k:])
+			samples++
+			if f64Plausible(v) {
+				ok++
+			}
+		}
+		if samples > 0 {
+			if fr := float64(ok) / float64(samples); fr > best {
+				best = fr
+			}
+		}
+	}
+	switch {
+	case idFrac >= 0.8:
+		return TailIDRun
+	case best >= 0.8:
+		return TailFloat64s
+	default:
+		return TailMixed
+	}
 }
 
 // ElementClassCensus decodes every OdBmElementHeader record of a sub-stream

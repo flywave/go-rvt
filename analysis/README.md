@@ -79,6 +79,11 @@ go-dgn 侧仅保留指引（`go-dgn/analysis/04-rvt/README.md`）。
    （违例=懒对象信封尾，R57 自洽）；DecodeElementHeader 暴露
    DynamicValues/EnvelopeTail（R63）
    - 未竟：4B 值↔属性名映射（队列序）；信封尾记录解析
+10. ✅ **M6.5 扩展尾定性与分类（已落地，第 10 轮探针）**：R63"违例"=按类扩展数据
+   而非对象信封——DBViewPlan 尾=元素 id 序列（**视图→成员映射**）、
+   FamilySymbol 尾=f64 坐标数组；TailKind 分类器（ids/floats64/floats32/
+   scalars/mixed）+ ExtendedTail 结构标记（R64）
+   - 未竟：各类扩展尾逐字段 schema；4B 值↔属性名映射
 
 ## 包结构
 
