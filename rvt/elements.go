@@ -48,6 +48,14 @@ type ElementHeader struct {
 
 	HeadBytes    int `json:"head_bytes"`    // static bytes consumed (incl. CondInt16s)
 	DynamicBytes int `json:"dynamic_bytes"` // undecoded token-section size
+
+	// Dynamic section (findings R63): after the 60B static head the body
+	// carries n 4-byte queued values followed by a 3-byte zero pad —
+	// n = (size-63)/4. ~98% (2023) / ~94% (2022) of records fit this pure
+	// 4B framing; the rest contain lazy-object envelopes ([i16 class]
+	// [fields] — R57) and are flagged EnvelopeTail with raw bytes only.
+	DynamicValues []uint32 `json:"dynamic_values,omitempty"` // raw 4B values (int or float bits)
+	EnvelopeTail  bool     `json:"envelope_tail,omitempty"`  // tail breaks the 4B framing
 }
 
 // DecodeElementHeader decodes the static head of an OdBmElementHeader body
@@ -104,6 +112,17 @@ func DecodeElementHeader(body []byte, lookup func(int16) string) (*ElementHeader
 	}
 	h.HeadBytes = pos
 	h.DynamicBytes = len(body) - pos
+	// Dynamic 4B-value framing (R63): values start at HeadBytes, 3B zero
+	// pad before the size echo.
+	if rest := len(body) - h.HeadBytes - 3; rest >= 0 && rest%4 == 0 {
+		n := rest / 4
+		h.DynamicValues = make([]uint32, n)
+		for k := 0; k < n; k++ {
+			h.DynamicValues[k] = binary.LittleEndian.Uint32(body[h.HeadBytes+k*4:])
+		}
+	} else {
+		h.EnvelopeTail = true
+	}
 	return h, nil
 }
 

@@ -172,3 +172,67 @@ func topN(cc []ClassCount, n int) []string {
 func fmtClassCount(c ClassCount) string {
 	return fmt.Sprintf("%s=%d", c.Name, c.Count)
 }
+
+// TestDynamicFraming validates the 4B-value + 3B-pad dynamic framing
+// (findings R63) across all ElementHeader records of the real samples.
+func TestDynamicFraming(t *testing.T) {
+	found := 0
+	for _, path := range samples {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		found++
+		version := "2023"
+		if strings.Contains(path, "2022") {
+			version = "2022"
+		}
+		f, _ := OpenCFB(data)
+		var biggest string
+		var sz uint64
+		for _, sp := range f.StreamPaths() {
+			if len(sp) > 11 && sp[:11] == "Partitions/" {
+				s, _ := f.Size(sp)
+				if s > sz {
+					sz, biggest = s, sp
+				}
+			}
+		}
+		raw, _ := f.Stream(biggest)
+		lookup := func(cls int16) string {
+			name, _ := classindex.Lookup(version, cls)
+			return name
+		}
+		part, err := ReadPartitionWithLookup(biggest[11:], raw, lookup)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var hdr *SubStream
+		for _, ss := range part.SubStreams {
+			if len(ss.Deposits) > 0 {
+				hdr = ss
+			}
+		}
+		scalar, envelope := 0, 0
+		for i := range hdr.Records {
+			h, err := DecodeElementHeader(hdr.Records[i].Body, lookup)
+			if err != nil {
+				continue
+			}
+			if h.EnvelopeTail {
+				envelope++
+			} else {
+				scalar++
+			}
+		}
+		total := scalar + envelope
+		if scalar*100 < total*90 {
+			t.Errorf("%s: scalar framing only %d/%d", path, scalar, total)
+		}
+		t.Logf("%s: dynamic framing scalar=%d envelope=%d (%.1f%% scalar)",
+			path, scalar, envelope, 100*float64(scalar)/float64(total))
+	}
+	if found == 0 {
+		t.Skip("no .rvt samples")
+	}
+}

@@ -74,6 +74,11 @@ go-dgn 侧仅保留指引（`go-dgn/analysis/04-rvt/README.md`）。
    OdBmFace/OdBmEdge 交替 id 序列目录化**；GElement 组按 deposit counter 键控；
    Geometry(2160) 内联 f64 bbox（英尺）；`rvt/geometry.go` ScanGCatalogRuns
    - 未竟：像目→对象 blob 指向；OBJREF 目标类；G 对象完整解码
+9. ✅ **M6 动态段框架（已落地，07-dynamic-queue.md 指导）**：
+   body = [静态 60B][n×4B 动态值][3B 垫]——98.4%/92.3% 记录纯 4B 框架
+   （违例=懒对象信封尾，R57 自洽）；DecodeElementHeader 暴露
+   DynamicValues/EnvelopeTail（R63）
+   - 未竟：4B 值↔属性名映射（队列序）；信封尾记录解析
 
 ## 包结构
 

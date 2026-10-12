@@ -96,6 +96,7 @@
 | 03-geometry-model.md | 几何模型决策、UnitSystem、坐标、实例 |
 | 04-g-classes.md | G 节点类型系统 + 基元字段表 |
 | 06-class-index.md | 类索引全表方法与勘误 |
+| 07-dynamic-queue.md | DynamicQueue 队列语义/字段表（动态段对齐，R58） |
 | bim-sdk-modules.md / oda-bim-clues.md | SDK 模块地图 / 消费方线索 |
 | findings.md | 台账 R1–R39 |
 | tables/*.csv, g-node-properties.txt | 提取产物 |
