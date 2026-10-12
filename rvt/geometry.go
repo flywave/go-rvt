@@ -600,8 +600,9 @@ func dot3(b []byte) float64 {
 }
 
 // ScanInlineGArcs collects GArc instances with the EndParams prefix model
-// (R88): [i16 GArc][EndParams 2×f64][XDir 24][YDir 24][Radius 8][Center 24],
-// gated on finite values, unit orthogonal axes and positive radius, from
+// (R88/R90): [i16 GArc][EndParams 2×f64][XDir 24][YDir 24][Radius 8]
+// [Center 24][IsFilled 1], gated on finite values, non-zero orthogonal
+// axes (scaled axes are valid — ellipse-style) and positive radius, from
 // the class-103 trees, attributed via tree ranges.
 func ScanInlineGArcs(data []byte, gArc int16, trees []GTree, lookup func(int16) string) []InlineArc {
 	var out []InlineArc
@@ -623,16 +624,7 @@ func ScanInlineGArcs(data []byte, gArc int16, trees []GTree, lookup func(int16) 
 			if !fin {
 				continue
 			}
-			xm := math.Sqrt(math.Float64frombits(binary.LittleEndian.Uint64(p[0:]))*math.Float64frombits(binary.LittleEndian.Uint64(p[0:])) +
-				math.Float64frombits(binary.LittleEndian.Uint64(p[8:]))*math.Float64frombits(binary.LittleEndian.Uint64(p[8:])) +
-				math.Float64frombits(binary.LittleEndian.Uint64(p[16:]))*math.Float64frombits(binary.LittleEndian.Uint64(p[16:])))
-			ym := math.Sqrt(math.Float64frombits(binary.LittleEndian.Uint64(p[24:]))*math.Float64frombits(binary.LittleEndian.Uint64(p[24:])) +
-				math.Float64frombits(binary.LittleEndian.Uint64(p[32:]))*math.Float64frombits(binary.LittleEndian.Uint64(p[32:])) +
-				math.Float64frombits(binary.LittleEndian.Uint64(p[40:]))*math.Float64frombits(binary.LittleEndian.Uint64(p[40:])))
-			if xm < 0.99 || xm > 1.01 || ym < 0.99 || ym > 1.01 {
-				continue
-			}
-			if math.Abs(dot3(p[:48])) > 0.02 {
+			if math.Abs(dot3(p[:48])) > 0.05*dotMagnitude(p[:48]) {
 				continue
 			}
 			radius := math.Float64frombits(binary.LittleEndian.Uint64(p[48:]))
@@ -706,4 +698,16 @@ func ScanInlineGLinesKeyed(data []byte, gLine int16, trees []GTree) []geom.Bound
 		}
 	}
 	return out
+}
+
+// dotMagnitude returns the product of the two vector magnitudes of six
+// f64s at b (for relative-orthogonality gating).
+func dotMagnitude(b []byte) float64 {
+	x1 := math.Float64frombits(binary.LittleEndian.Uint64(b))
+	y1 := math.Float64frombits(binary.LittleEndian.Uint64(b[8:]))
+	z1 := math.Float64frombits(binary.LittleEndian.Uint64(b[16:]))
+	x2 := math.Float64frombits(binary.LittleEndian.Uint64(b[24:]))
+	y2 := math.Float64frombits(binary.LittleEndian.Uint64(b[32:]))
+	z2 := math.Float64frombits(binary.LittleEndian.Uint64(b[40:]))
+	return math.Sqrt(x1*x1+y1*y1+z1*z1) * math.Sqrt(x2*x2+y2*y2+z2*z2)
 }
