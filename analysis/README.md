@@ -86,6 +86,10 @@ go-dgn 侧仅保留指引（`go-dgn/analysis/04-rvt/README.md`）。
    - 未竟：各类扩展尾逐字段 schema；4B 值↔属性名映射
 11. 🔎 **M7 G blob 定界（边界探察，未完）**：G 标记双子流分布（102/103），
     真对象 blob 与目录交错——指向规则为下一 REA 战役入口（R65）
+12. ✅ **M8 对象模型声明（已落地）**：`rvt/geom` 契约包——Element/View/BRep
+    已填充（77,217 元素/1 视图/493 BRep @2023 实测），曲线/网格/实例类型
+    按 R54 schema 声明待填；`Partition.Model(version)` 装配器 +
+    Metadata.Model 摘要（R66）
 
 ## 包结构
 

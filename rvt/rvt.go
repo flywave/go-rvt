@@ -53,6 +53,7 @@ type Metadata struct {
 	PartitionWorksets []string         `json:"partition_worksets,omitempty"`
 	ElemTable         *ElemTableInfo   `json:"elem_table,omitempty"`
 	ProjectEntries    []string         `json:"project_entries,omitempty"` // ProjectInformation ZIP
+	Model             *ModelSummary    `json:"model,omitempty"`
 
 	// M3: partition containers (Partitions/<n>).
 	Partitions []PartitionInfo `json:"partitions,omitempty"`
@@ -161,6 +162,7 @@ func Open(data []byte) (*Metadata, error) {
 		name, _ := classindex.Lookup(md.RevitVersion, cls)
 		return name
 	}
+	var biggest *Partition
 	for _, sp := range f.StreamPaths() {
 		if !bytes.HasPrefix([]byte(sp), []byte("Partitions/")) {
 			continue
@@ -172,7 +174,18 @@ func Open(data []byte) (*Metadata, error) {
 		name := sp[len("Partitions/"):]
 		if part, perr := ReadPartitionWithLookup(name, b, lookup); part != nil {
 			md.Partitions = append(md.Partitions, part.Info)
+			if biggest == nil || part.Info.LogicalBytes > biggest.Info.LogicalBytes {
+				biggest = part
+			}
 			_ = perr
+		}
+	}
+	if biggest != nil {
+		m := biggest.Model(md.RevitVersion)
+		md.Model = &ModelSummary{
+			Elements: len(m.Elements),
+			Views:    len(m.Views),
+			BReps:    len(m.BReps),
 		}
 	}
 	sort.Slice(md.Partitions, func(i, j int) bool { return md.Partitions[i].Name < md.Partitions[j].Name })
@@ -227,4 +240,12 @@ func zipEntryNames(b []byte) []string {
 		out = append(out, e.Name)
 	}
 	return out
+}
+
+// ModelSummary is the JSON summary of the assembled object model
+// (full model via Partition.Model / rvt/geom).
+type ModelSummary struct {
+	Elements int `json:"elements"`
+	Views    int `json:"views,omitempty"`
+	BReps    int `json:"breps,omitempty"`
 }
