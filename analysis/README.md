@@ -97,8 +97,9 @@ go-dgn 侧仅保留指引（`go-dgn/analysis/04-rvt/README.md`）。
     定案（引用 `[cls][id≥1]` vs 内联 `[cls][0]+payload`）；**GLine = 6×f64**
     （109 条，Model.Curves，R68）；**GArc 内容锚定 = XDir/YDir 单位正交 +
     Radius + Center**（**3,972 条模型空间圆弧**，Model.Arcs，R70）；
-    OdGePoint3dReader=3×f64 定案（R69）；NurbSpline 对象定位（degree=4、
-    WPoint 数组可见）、PolyMesh 头已见——数组帧解码待专项；
+    OdGePoint3dReader=3×f64 定案（R69）；PolyMesh 头帧破解
+    （[gstyle×4][0x20][-1][count][facets]，R73）；NurbSpline=样例限制
+    （仅 3 对象，需富样条样例）；块键=头部 3 小块（R71）；绑定=M10；
     deposit 块键=头部小块仅 3 个（R71），ref→object 绑定=M10 边界
 
 ## 包结构
