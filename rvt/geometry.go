@@ -304,3 +304,49 @@ func ScanGTrees(data []byte, from int, gElement int16, lookup func(int16) string
 	}
 	return trees
 }
+
+// Inline curve objects in the class-102 object store (findings R68):
+// [i16 GLine][u32 0][f64×6] — Origin + second point (schema names the
+// second vector DirectionVector; on-disk values read as an endpoint pair).
+// Distinguishing marker: the u32 slot is 0 for inline instances while
+// typed references carry non-zero ids.
+
+// ScanGLines collects inline GLine objects from a class-102 object store.
+// A payload qualifies when all six f64s are finite, within internal-feet
+// magnitude, not all zero, and origin != second point.
+func ScanGLines(data []byte, gLine int16) []geom.Line {
+	var out []geom.Line
+	for off := 0; off+6+48 <= len(data); off += 2 {
+		if int16(binary.LittleEndian.Uint16(data[off:])) != gLine {
+			continue
+		}
+		if binary.LittleEndian.Uint32(data[off+2:]) != 0 {
+			continue
+		}
+		var f [6]float64
+		finite := true
+		nonzero := false
+		for k := 0; k < 6; k++ {
+			f[k] = math.Float64frombits(binary.LittleEndian.Uint64(data[off+6+k*8:]))
+			if math.IsNaN(f[k]) || math.IsInf(f[k], 0) || math.Abs(f[k]) > 1e6 {
+				finite = false
+				break
+			}
+			if f[k] != 0 {
+				nonzero = true
+			}
+		}
+		if !finite || !nonzero {
+			continue
+		}
+		dx, dy, dz := f[3]-f[0], f[4]-f[1], f[5]-f[2]
+		if math.Abs(dx)+math.Abs(dy)+math.Abs(dz) < 1e-9 {
+			continue
+		}
+		out = append(out, geom.Line{
+			Origin:    geom.Point3{X: f[0], Y: f[1], Z: f[2]},
+			Direction: geom.Point3{X: f[3], Y: f[4], Z: f[5]},
+		})
+	}
+	return out
+}

@@ -93,6 +93,10 @@ go-dgn 侧仅保留指引（`go-dgn/analysis/04-rvt/README.md`）。
     已填充（77,217 元素/1 视图/493 BRep @2023 实测），曲线/网格/实例类型
     按 R54 schema 声明待填；`Partition.Model(version)` 装配器 +
     Metadata.Model 摘要（R66）
+13. 🔶 **M9 几何 payload（部分落地，第 12 轮）**：class-102 对象存储模型定案
+    （引用 `[cls][id≥1]` vs 内联 `[cls][0]+payload`）；**GLine payload =
+    6×f64**（109 条提取，`Model.Curves` + ScanGLines，R68）；GArc/GPoint/
+    PolyMesh/NurbSpline 布局待专项（OBJREF 交错）
 
 ## 包结构
 

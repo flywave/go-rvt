@@ -118,6 +118,12 @@
 |---|---|---|---|---|
 | R67 | **★class-103 = 按元素 G 树流（M7 定案）**：G 区 = GeomStep 目录 + **按 deposit 键控的 G 树块** `[u32 counter][8B key][i16 2073 GElement][u32 counter]…对象序列…`（块体延至下一严格组起点；2023: 10,537 组/10,477 唯一 counter，89% 与 class-101 记录 counter 联动）。块内对象序列混合：**内联 GRep 族对象**（`[i16 class][GeomBBox 48B][GTightBBox 48B]`——**双 bbox 字节相同**为强判据；ObjectType/GRepFlags i32 对随后的 `ffffffff 00000000 ffffffff`+GInfoFlags(0x88004=DefaultModel) 尾）与**类型化子引用**（`[i16 class][u32 child-id]`，id 按类连续）。扫描收紧后：925 个 bbox **100% 合理**（实测样本 (-0.0475,-0.0197,0)..(0.0082,0.0278,0) 英尺），829 元素带世界包围盒。API：ScanGTrees/GTree/GRef + geom.Element.BBox + Model.Trees | rvt/geometry.go ScanGTrees + TestGTreesRealSamples | 观察→推断 | 双 bbox 相同=紧致时相等（非紧致可能不同——潜在漏检）；GArc=2040 修正记录；曲线/网格 payload 在 class-102（下一战役） |
 
+## M9 几何 payload 轮（第 12 轮）
+
+| ID | 结论 | 证据 | 置信度 | 边界/未知 |
+|---|---|---|---|---|
+| R68 | **class-102 对象存储部分解码（M9 首收）**：存储 = deposit 键控块（头部 `[counter][0xf77f22cb][87=AbsCurveDriver][3107]`）+ 两类条目：**引用** `[i16 class][u32 id≥1]` 与 **内联实例** `[i16 class][u32 0][payload]`。**GLine 内联 payload = 6×f64（Origin 点 + 第二点）**——109 条提取成功（样例 (0,0,0)→(0.336,0.246,0) 英尺），合理性门（有限/幅值/非退化）；`Model.Curves` + `ScanGLines` 落地。GArc(2040) 假设布局（固定偏移 XDir/YDir/Radius/Center）不成立——XDirection/YDirection 为带类前缀 OBJREF，交错布局待专项；GPoint(68 实例) 布局未破 | rvt/geometry.go ScanGLines + TestCurvesRealSamples + GArc 探针 | 观察→推断 | GArc/GPoint/PolyMesh/NurbSpline payload 布局；引用 id ↔ 内联实例的绑定（块框架） |
+
 ## M8 对象模型声明轮
 
 | ID | 结论 | 证据 | 置信度 | 边界/未知 |

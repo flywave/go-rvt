@@ -17,10 +17,14 @@ type Model struct {
 	Views    []geom.View
 	BReps    []geom.BRep
 	Trees    []geom.GTree
+	Curves   []geom.Line
 }
 
 // geometrySubStreamClass is the class-103 page tag (both samples).
 const geometrySubStreamClass = 103
+
+// geometryStoreClass is the class-102 page tag (G node object store).
+const geometryStoreClass = 102
 
 // Model assembles the populated geometry object model from this partition's
 // sub-streams: Elements from the deposit (class-101) ElementHeader records,
@@ -44,6 +48,17 @@ func (p *Partition) Model(version string) *Model {
 	}
 	if geo != nil {
 		m.collectBReps(geo.Data, lookup)
+		var store *SubStream
+		for _, ss := range p.SubStreams {
+			if ss.Class == geometryStoreClass {
+				store = ss
+			}
+		}
+		if store != nil {
+			if gl, ok := classindex.Index(version, "OdBmGLine"); ok {
+				m.Curves = ScanGLines(store.Data, int16(gl))
+			}
+		}
 		gEl, ok := classindex.Index(version, "OdBmGElement")
 		if ok {
 			m.Trees = ScanGTrees(geo.Data, func() int {

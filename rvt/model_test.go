@@ -163,3 +163,40 @@ func TestGTreesRealSamples(t *testing.T) {
 	}
 	var _ = geom.BBox{}
 }
+
+// TestCurvesRealSamples validates the class-102 GLine extraction (R68).
+func TestCurvesRealSamples(t *testing.T) {
+	data, err := os.ReadFile(samples[0])
+	if err != nil {
+		t.Skip("no sample")
+	}
+	f, _ := OpenCFB(data)
+	raw, _ := f.Stream("Partitions/13")
+	lookup := func(cls int16) string {
+		name, _ := classindex.Lookup("2023", cls)
+		return name
+	}
+	part, err := ReadPartitionWithLookup("13", raw, lookup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := part.Model("2023")
+	t.Logf("curves extracted: %d", len(m.Curves))
+	if len(m.Curves) < 50 {
+		t.Errorf("only %d curves", len(m.Curves))
+	}
+	// sanity: finite endpoints, non-degenerate
+	for i, c := range m.Curves {
+		dx := c.Direction.X - c.Origin.X
+		dy := c.Direction.Y - c.Origin.Y
+		dz := c.Direction.Z - c.Origin.Z
+		if dx*dx+dy*dy+dz*dz == 0 {
+			t.Fatalf("curve %d degenerate", i)
+		}
+	}
+	if len(m.Curves) > 0 {
+		c := m.Curves[0]
+		t.Logf("sample curve: (%.5f,%.5f,%.5f)->(%.5f,%.5f,%.5f)",
+			c.Origin.X, c.Origin.Y, c.Origin.Z, c.Direction.X, c.Direction.Y, c.Direction.Z)
+	}
+}
