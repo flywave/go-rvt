@@ -124,6 +124,8 @@
 |---|---|---|---|---|
 | R68 | **class-102 对象存储部分解码（M9 首收）**：存储 = deposit 键控块（头部 `[counter][0xf77f22cb][87=AbsCurveDriver][3107]`）+ 两类条目：**引用** `[i16 class][u32 id≥1]` 与 **内联实例** `[i16 class][u32 0][payload]`。**GLine 内联 payload = 6×f64（Origin 点 + 第二点）**——109 条提取成功（样例 (0,0,0)→(0.336,0.246,0) 英尺），合理性门（有限/幅值/非退化）；`Model.Curves` + `ScanGLines` 落地。GArc(2040) 假设布局（固定偏移 XDir/YDir/Radius/Center）不成立——reader 反汇编证实调用序 = GCurve 基类 → XDirection/YDirection（vcall OBJREF）→ f64 Radius → Center（OBJREF）→ bool IsFilled，payload 前段含嵌套对象前缀 | rvt/geometry.go ScanGLines + TestCurvesRealSamples + GArc reader 反汇编 | 观察→推断 | GArc/GPoint/PolyMesh/NurbSpline payload 布局（需 OBJREF 类 schema）；引用 id ↔ 内联实例的绑定（块框架） |
 
+| R69 | **OBJREF 点/向量目标类线上形态定案**：Coord/OriginPoint/DirectionVector/XDirection/YDirection/Center 的目标 reader = `OdGePoint3dReader<double>::read`（TB_Common @0x2a068）= **3×doubleReader = 24B（x,y,z）内联、无类前缀**（float 变体 @0x2a0e2 同构）——快路径点/向量不写 [i16 类索引]。GPoint[0] 块（3 处全同字节）= PointElementGStep(3098/3099) 引用列表而非坐标点——GPoint 实例坐标在其 G 树/其他块。GArc payload 前段含逐实例可变的 GCurve/GNode 前缀（EndParams/GInfo），需锚定前缀对照轮 | objdump GPoint::read（setCoord 前 callq OdGePoint3dReader::read@plt）+ TB_Common 反汇编 + GPoint[0] 三处字节比对 | 观察 | GArc/GPoint 完整布局需锚定前缀分析 |
+
 ## M8 对象模型声明轮
 
 | ID | 结论 | 证据 | 置信度 | 边界/未知 |
