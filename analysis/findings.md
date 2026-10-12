@@ -147,6 +147,8 @@
 
 | R91 | **组间区归属基础设施落地（M11 收口）**：`ScanInlineGArcsAttributed`（EP 有限/幅值门 + 轴非零正交（相对）门 + 半径门 + 最近前驱树 counter 归属）——富样例实测 **1 条弧归入已知元素 291951**（R=2.64ft，C=原点）；更严的相对正交门下 R90 的 9 命中收敛为 1（其余为 dot≤500 松阈假阳性）——**富样例实际 GArc 对象极少**（与 378 目录噪声结论一致）。归属框架（最近前驱树）+ 门集就绪，富样例到位即用 | ScanInlineGArcsAttributed + TestXAttributed（1/1 已知元素） | 观察 | 元素 291951 的弧语义；更多命中需富样例 |
 
+| R102a | **class-103 全量弧扫描=不可行（架构边界确认）**：class-103 无 deposit 块头（R84），所有 G 节点数值数据（变换矩阵/坐标/法向量/参数）连续混排——f64 单位正交+正半径扫描命中 9,664 个但全为 GRep 变换矩阵元素（R=0 的旋转矩阵）。**弧对象定位必须经 deposit 边界映射**，不能通过数据模式匹配 | 全量 f64 单位正交扫描（9,664 假阳性） | 观察 | 架构边界：需写出器文法或动态分析 |
+
 | R96 | **Ghidra headless 首次运行 + 函数边界问题**：analyzeHeadless 成功导入 TB_Format2023Readers.tx（40MB ELF）并创建项目（/tmp/ghidra_proj/RVT_REA），但自动分析未在 nm 报告的 reader 地址创建函数边界（大型 stripped ELF 常见问题）——nm 地址→Ghidra 函数需二次定位（`getFunctionAt` 返回 null）。后续：需 `-analysisTimeoutPerFile` 提高或手动 `createFunction` 前运行 `analyzeChanges`；Ghidra 项目保留在 /tmp/ghidra_proj | Ghidra headless 运行日志 + 反编译输出 | 观察 | 函数分析精度 |
 
 | R96a | **Ghidra 完整分析完成但函数定位不准**：analyzeHeadless 完整分析（3600s）后，按 nm 地址反编译的函数与目标不匹配（0xf98b8a 反编译出 OdBmRoomBoundingItem transform 而非 GArc reader——大型 stripped ELF 的 nm 地址→Ghidra 函数映射需基于 SymbolTable 搜索而非地址直查）。Ghidra 项目保留，后续需用 SymbolTable API 按 mangled name 搜索 | analyzeHeadless 完整分析 + 反编译验证 | 观察 | 工具精化后可续 |
