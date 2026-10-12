@@ -15,6 +15,9 @@ func TestLookupAnchors(t *testing.T) {
 		{"2023", 2044, "OdBmGBrep"},
 		{"2023", 1481, "OdBmEntityInfoData"},
 		{"2023", 2081, "OdBmGFilter"},
+		{"2015", 1201, "OdBmElementHeader"},
+		{"2015", 1763, "OdBmGNurbSpline"},
+		{"2015", 1772, "OdBmGPolyMesh"},
 	}
 	for _, c := range cases {
 		got, ok := Lookup(c.version, c.index)
@@ -25,14 +28,17 @@ func TestLookupAnchors(t *testing.T) {
 }
 
 func TestLookupUnknown(t *testing.T) {
-	if _, ok := Lookup("2015", 100); ok {
+	if _, ok := Lookup("2009", 100); ok {
 		t.Error("unknown version should not resolve")
 	}
 	if _, ok := Lookup("2023", 30000); ok {
 		t.Error("index outside table should not resolve")
 	}
-	if !HasVersion("2023") || !HasVersion("2022") || HasVersion("2014") {
+	if !HasVersion("2023") || !HasVersion("2022") || !HasVersion("2014") || !HasVersion("2015") {
 		t.Error("HasVersion broken")
+	}
+	if HasVersion("2009") {
+		t.Error("2009 should not be covered")
 	}
 	// version strings with prefixes/suffixes resolve via the year
 	if _, ok := Lookup("Autodesk Revit 2023.1", 1398); !ok {
