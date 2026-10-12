@@ -49,6 +49,59 @@ type FileInfo struct {
 // Err indicates a malformed BasicFileInfo stream.
 var Err = fmt.Errorf("bfi: malformed stream")
 
+// RevisionAccept maps Revit version → the set of BasicFileInfo stream
+// revisions that version writes (parallel-REA accept table — findings R58;
+// both bundled samples are rev 14 / 2023 and 2022). Parse reports a
+// RevisionMismatch when a stream's revision falls outside its version's set;
+// parsing still succeeds (the rev-14 layout is attempted for all).
+var RevisionAccept = map[string][]uint32{
+	"2011": {3}, "2012": {3},
+	"2013": {6}, "2014": {6},
+	"2015": {9},
+	"2016": {9, 10},
+	"2017": {10}, "2018": {10}, "2019": {10},
+	"2020": {13}, "2021": {13},
+	"2022": {13, 14},
+	"2023": {14}, "2024": {14}, "2025": {14}, "2026": {14},
+}
+
+// ErrRevisionMismatch reports a revision outside the version's accept set.
+var ErrRevisionMismatch = fmt.Errorf("bfi: revision not in version accept set")
+
+// CheckRevision validates fi.Revision against fi.SavedInVersion using the
+// accept table. Unknown versions are accepted (table covers 2011–2026).
+func CheckRevision(fi *FileInfo) error {
+	accept, ok := RevisionAccept[year(fi.SavedInVersion)]
+	if !ok {
+		return nil
+	}
+	for _, r := range accept {
+		if fi.Revision == r {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: rev %d for %s (accept %v)", ErrRevisionMismatch, fi.Revision, fi.SavedInVersion, accept)
+}
+
+func year(version string) string {
+	for i := 0; i+4 <= len(version); i++ {
+		if version[i] >= '0' && version[i] <= '9' {
+			y := version[i : i+4]
+			digits := true
+			for k := 0; k < 4; k++ {
+				if y[k] < '0' || y[k] > '9' {
+					digits = false
+					break
+				}
+			}
+			if digits && y >= "2011" && y <= "2026" {
+				return y
+			}
+		}
+	}
+	return version
+}
+
 // Parse walks the TLV layout. Only revision 14 is validated against samples;
 // other revisions are attempted with the same layout and may fail.
 func Parse(data []byte) (*FileInfo, error) {

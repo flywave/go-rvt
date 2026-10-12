@@ -145,3 +145,31 @@ func TestParseRealSamples(t *testing.T) {
 		t.Skip("no .rvt samples on this machine")
 	}
 }
+
+func TestCheckRevision(t *testing.T) {
+	cases := []struct {
+		rev   uint32
+		ver   string
+		valid bool
+	}{
+		{14, "2023", true},
+		{13, "2022", true},
+		{14, "2022", true},
+		{3, "2011", true},
+		{14, "2011", false},
+		{6, "2015", false},
+		{9, "2015", true},
+		{14, "Autodesk Revit 2024.2", true}, // year extraction
+		{99, "2009", true},                  // unknown version accepted
+	}
+	for _, c := range cases {
+		fi := &FileInfo{Revision: c.rev, SavedInVersion: c.ver}
+		err := CheckRevision(fi)
+		if c.valid && err != nil {
+			t.Errorf("CheckRevision(%d, %s) = %v, want nil", c.rev, c.ver, err)
+		}
+		if !c.valid && err == nil {
+			t.Errorf("CheckRevision(%d, %s) = nil, want mismatch", c.rev, c.ver)
+		}
+	}
+}

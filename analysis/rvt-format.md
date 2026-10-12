@@ -38,7 +38,7 @@
  8=string[布局?] 9=guid16B 10=i16
  13=itemMode(0/6标量,1定长数组,5变长数组)
  14=对象引用(递归 Int16 类索引+体; 值类型名 ElementId/ElementIdPlusIndex/GUIDvalue)
-之后: initReferences（IdReference 两阶段回填）+ readDynamicProperties
+之后: initReferences（IdReference 两阶段回填）+ **动态属性段=队列驱动连续标准对象读**（R57，非位压缩）
 表流尾: u32 UnitSystem{0=Metric,1=Imperial}
 ```
 
@@ -73,10 +73,17 @@
 | GInfoFlags | ✅ E1 全表（04-g-classes §3b） |
 | 签名 64B | 🟡 非对称签名定性（R41）；公钥[?] |
 | [counter][size] 循环 | 🟡 路由=DepositId×3 定案；字节层在 BmIODepositPE（R42） |
+| 动态段 | 🟡 队列序标准信封（R57，位压缩假设作废）；字节框架需队列语义 |
 | ElementId 裸宽 | 🟡 队列回填定案；裸宽在 PE/objectReader[?] |
-| NurbSpline 权重 | [?] ControlPoints 元素内或 Rational 隐含 |
+| NurbSpline 权重 | ✅ WPoint={f64 weight, Point3d}=4×f64 内联（R54） |
+| 动态属性段 | ✅ 队列驱动标准对象读（R57）；~~位压缩~~作废 |
+| BFI 修订 | ✅ 接受表 2011→{3}…2023–26→{14}（R53）；rev≠14 布局=外部样例 |
+| 签名 64B | ✅ SDK 无验证路径=跳过（R55）；算法=外部（Revit 侧） |
+| ElementHeader/ElemRec schema | ✅ 属性表+字节级（R45/R49/R56） |
+| [counter][size] 循环 | ✅ stride=12+size，class-101（R45） |
+| ElementId 裸宽 | ✅ i32，null=-1（R49） |
 | ElemTable depA/B、deposit91、Global 头 u32、BFI u8 标记 | [?]（BFI 标记需协同样例） |
-| 干净/协同样例、BmIODepositPE、签名公钥、BFI rev≠14 | **外部依赖** |
+| 干净/协同样例、签名公钥算法、BFI rev≠14、CondInt16 v≠0 长度、Contents 帧外层 | **外部依赖/低价值** |
 
 ## 5. 文档索引
 

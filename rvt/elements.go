@@ -19,7 +19,7 @@ import (
 //	[i32]                            AbFlags4Bytes bitfield
 //	[i16 class][i32][i32]            ClassDefinitionRef — the element's actual
 //	                                 class index (resolves via classindex) + 2 refs
-//	[CondInt16 ×2]                   [i32 v][i16]; v==0 → 6B, else ≥8B (branchy)
+//	[CondInt16 ×2]                   [i32 v][i16] = 6B each (all branches)
 //	[dynamic properties]             readDynamicProperties token section
 //	                                 (bit-packed; bounded unknown — R52)
 //
@@ -91,17 +91,16 @@ func DecodeElementHeader(body []byte, lookup func(int16) string) (*ElementHeader
 	}
 	h.ClassRefA = rd32()
 	h.ClassRefB = rd32()
-	// Two OdBmCondInt16 properties: [i32 v][i16]; v==0 → done (6B), v!=0 →
-	// at least one more i16 (8B; the branch may continue — conservative cut).
+	// Two OdBmCondInt16 properties: [i32 v][i16] — every branch of the
+	// reader consumes exactly 6 bytes (REA round 8: the v!=0 path also reads
+	// a single i16 before returning; the earlier 8B model was wrong and
+	// misaligned the dynamic section).
 	for k := 0; k < 2; k++ {
 		if pos+6 > len(body) {
 			break
 		}
-		v := rd32()
+		rd32()
 		rd16()
-		if v != 0 && pos+2 <= len(body) {
-			pos += 2
-		}
 	}
 	h.HeadBytes = pos
 	h.DynamicBytes = len(body) - pos
