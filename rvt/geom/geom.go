@@ -142,6 +142,7 @@ type GRef struct {
 type GTree struct {
 	Counter uint32 `json:"counter"`
 	Offset  int    `json:"-"`
+	End     int    `json:"-"` // exclusive end of the group body
 	BBoxes  []BBox `json:"bboxes,omitempty"`
 	Refs    []GRef `json:"refs,omitempty"`
 }

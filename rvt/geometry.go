@@ -267,6 +267,7 @@ func ScanGTrees(data []byte, from int, gElement int16, lookup func(int16) string
 				break
 			}
 		}
+		g.End = next
 		body := data[pos+18 : next]
 		for k := 0; k+2 <= len(body); k += 2 {
 			cls := int16(binary.LittleEndian.Uint16(body[k:]))
@@ -559,4 +560,102 @@ func ScanInlineGLines(data []byte, gLine int16) []geom.Line {
 // tests and tools that do not carry a version).
 func classindexIndex2023(name string) (int16, bool) {
 	return classindex.Index("2023", name)
+}
+
+// InlineObj is one inline G-node object attributed to its enclosing tree.
+type InlineObj struct {
+	ElementID uint32 `json:"element_id"`
+	Class     int16  `json:"class"`
+	Name      string `json:"name,omitempty"`
+	Offset    int    `json:"-"`
+}
+
+// InlineArc is one decoded GArc instance (reader order: XDirection,
+// YDirection, Radius, Center, IsFilled — R54/R86 method).
+type InlineArc struct {
+	ElementID uint32      `json:"element_id"`
+	XDir      geom.Point3 `json:"xdir"`
+	YDir      geom.Point3 `json:"ydir"`
+	Radius    float64     `json:"radius"`
+	Center    geom.Point3 `json:"center"`
+}
+
+// isUnitish: |v| within [0.99, 1.01].
+func isUnitish(x, y, z float64) bool {
+	m := math.Sqrt(x*x + y*y + z*z)
+	return m > 0.99 && m < 1.01
+}
+
+// dot3 of two vectors given as consecutive float64 triples starting at b.
+func dot3(b []byte) float64 {
+	x1 := math.Float64frombits(binary.LittleEndian.Uint64(b))
+	y1 := math.Float64frombits(binary.LittleEndian.Uint64(b[8:]))
+	z1 := math.Float64frombits(binary.LittleEndian.Uint64(b[16:]))
+	x2 := math.Float64frombits(binary.LittleEndian.Uint64(b[24:]))
+	y2 := math.Float64frombits(binary.LittleEndian.Uint64(b[32:]))
+	z2 := math.Float64frombits(binary.LittleEndian.Uint64(b[40:]))
+	return x1*x2 + y1*y2 + z1*z2
+}
+
+// ScanInlineGArcs collects GArc instances ([i16 GArc][XDir 24][YDir 24]
+// [Radius 8][Center 24], gated on unit orthogonal axes and positive radius)
+// from the class-103 trees, attributed via tree ranges.
+func ScanInlineGArcs(data []byte, gArc int16, trees []GTree, lookup func(int16) string) []InlineArc {
+	var out []InlineArc
+	for _, tr := range trees {
+		body := data[tr.Offset+18 : tr.End]
+		for k := 0; k+2+88 <= len(body); k += 2 {
+			if int16(binary.LittleEndian.Uint16(body[k:])) != gArc {
+				continue
+			}
+			p := body[k+2:]
+			fin := true
+			for kk := 0; kk < 80; kk += 8 {
+				vv := math.Float64frombits(binary.LittleEndian.Uint64(p[kk:]))
+				if math.IsNaN(vv) || math.IsInf(vv, 0) {
+					fin = false
+					break
+				}
+			}
+			if !fin {
+				continue
+			}
+			xm := math.Sqrt(math.Float64frombits(binary.LittleEndian.Uint64(p[0:]))*math.Float64frombits(binary.LittleEndian.Uint64(p[0:])) +
+				math.Float64frombits(binary.LittleEndian.Uint64(p[8:]))*math.Float64frombits(binary.LittleEndian.Uint64(p[8:])) +
+				math.Float64frombits(binary.LittleEndian.Uint64(p[16:]))*math.Float64frombits(binary.LittleEndian.Uint64(p[16:])))
+			ym := math.Sqrt(math.Float64frombits(binary.LittleEndian.Uint64(p[24:]))*math.Float64frombits(binary.LittleEndian.Uint64(p[24:])) +
+				math.Float64frombits(binary.LittleEndian.Uint64(p[32:]))*math.Float64frombits(binary.LittleEndian.Uint64(p[32:])) +
+				math.Float64frombits(binary.LittleEndian.Uint64(p[40:]))*math.Float64frombits(binary.LittleEndian.Uint64(p[40:])))
+			if xm < 0.99 || xm > 1.01 || ym < 0.99 || ym > 1.01 {
+				continue
+			}
+			if math.Abs(dot3(p[:48])) > 0.02 {
+				continue
+			}
+			radius := math.Float64frombits(binary.LittleEndian.Uint64(p[48:]))
+			if radius <= 1e-6 || radius > 1e5 {
+				continue
+			}
+			out = append(out, InlineArc{
+				ElementID: tr.Counter,
+				XDir: geom.Point3{
+					X: math.Float64frombits(binary.LittleEndian.Uint64(p[0:])),
+					Y: math.Float64frombits(binary.LittleEndian.Uint64(p[8:])),
+					Z: math.Float64frombits(binary.LittleEndian.Uint64(p[16:])),
+				},
+				YDir: geom.Point3{
+					X: math.Float64frombits(binary.LittleEndian.Uint64(p[24:])),
+					Y: math.Float64frombits(binary.LittleEndian.Uint64(p[32:])),
+					Z: math.Float64frombits(binary.LittleEndian.Uint64(p[40:])),
+				},
+				Radius: radius,
+				Center: geom.Point3{
+					X: math.Float64frombits(binary.LittleEndian.Uint64(p[56:])),
+					Y: math.Float64frombits(binary.LittleEndian.Uint64(p[64:])),
+					Z: math.Float64frombits(binary.LittleEndian.Uint64(p[72:])),
+				},
+			})
+		}
+	}
+	return out
 }
