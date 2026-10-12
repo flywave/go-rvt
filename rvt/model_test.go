@@ -353,3 +353,66 @@ func TestBindingPrecision(t *testing.T) {
 		t.Logf("arc center containment: %d/%d (%.1f%%)", aIn, aIn+aOut, 100*float64(aIn)/float64(aIn+aOut))
 	}
 }
+
+// TestInlineCurvesRealSamples validates inline GLine extraction from the
+// class-103 G trees (R86).
+func TestInlineCurvesRealSamples(t *testing.T) {
+	data, err := os.ReadFile(samples[0])
+	if err != nil {
+		t.Skip("no sample")
+	}
+	f, _ := OpenCFB(data)
+	raw, _ := f.Stream("Partitions/13")
+	lookup := func(cls int16) string {
+		name, _ := classindex.Lookup("2023", cls)
+		return name
+	}
+	part, err := ReadPartitionWithLookup("13", raw, lookup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var geo *SubStream
+	for _, ss := range part.SubStreams {
+		if ss.Class == 103 {
+			geo = ss
+		}
+	}
+	gl, _ := classindexLookup2023("OdBmGLine")
+	lines := ScanInlineGLines(geo.Data, gl)
+	t.Logf("inline GLine objects: %d", len(lines))
+	if len(lines) < 1000 {
+		t.Errorf("only %d inline lines (want >= 1000)", len(lines))
+	}
+	nonDegenerate := 0
+	var sample geom.Line
+	have := false
+	for _, l := range lines {
+		dx := l.Direction.X - l.Origin.X
+		dy := l.Direction.Y - l.Origin.Y
+		dz := l.Direction.Z - l.Origin.Z
+		if math64abs(dx)+math64abs(dy)+math64abs(dz) > 1e-6 {
+			nonDegenerate++
+			if !have {
+				sample = l
+				have = true
+			}
+		}
+	}
+	t.Logf("non-degenerate: %d; sample: (%.4f,%.4f,%.4f)->(%.4f,%.4f,%.4f)",
+		nonDegenerate, sample.Origin.X, sample.Origin.Y, sample.Origin.Z,
+		sample.Direction.X, sample.Direction.Y, sample.Direction.Z)
+	if nonDegenerate < 100 {
+		t.Errorf("only %d non-degenerate lines", nonDegenerate)
+	}
+}
+
+func classindexLookup2023(name string) (int16, bool) {
+	return classindex.Index("2023", name)
+}
+
+func math64abs(v float64) float64 {
+	if v < 0 {
+		return -v
+	}
+	return v
+}

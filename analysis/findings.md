@@ -138,6 +138,8 @@
 
 | R82 | **样条 payload 定位边界（M10 探察收口）**：① `[NurbSpline][0]` 块 = **引用列表**（denormal f64 解出小整数——整数数组误读），非坐标对象；② knot 向量内容锚定（≥4 连同值 f64 + 单调尾）在 class-102 全扫仅命中**整数数组假阳性**（重复 u32=2 数组）——class-102 无裸 f64 节点向量；③ 结论：样条坐标 payload 或在未定位的块型中、或样条在 deposit 外另有存储——**需 deposit 写出器级文法（R76 检验链）或样条密集样例**。累计 4 轮探针（R72/R73/R81/R82）已穷尽黑盒方法 | knot 内容锚定扫描（假阳性 4 处全为 u32=2 数组）+ GPoint/GLine/NurbSpline [0] 块对比 | 观察 | 写出器文法（M10 主线）|
 
+| R86 | **★G 几何真身定位（M9 目标达成）**：**G 节点几何以快路径内联形式存在于 class-103 树内**——`[i16 class][payload]`（无前缀，R69 点/向量规则的自然延伸）：`ScanInlineGLines` 扫 `[GLine 1798][f64×6]`（Origin+第二点）= **3,920 条线段**（3,916 非退化；样例 (0,0.0417,0)→(0,0,0)=0.5 英寸真实线段；GBrep 同位假阳性基线仅 14）；`[cls][0]` 块（class-102）统一为类型化子引用表（R72/R82 归纳正确）；此前"几何缺失"是搜索位置错误（class-102 而非 class-103）。API：ScanInlineGLines + Model.InlineCurves | rvt/geometry.go ScanInlineGLines + 测试（GBrep 基线对照） | 观察→推断 | 内联对象↔元素归属（经树 counter，M11）；GArc/GNurbSpline 同法内联扫描（预期同构） |
+
 | R78 | **绑定精度检验=当前样例不可判定**：bbox 包含测试（曲线端点 ∈ 元素世界 bbox ±1ft）在 2023 样例上无法执行——109 条绑定曲线的所属元素**无一具有 G 树 bbox**（925 个 bbox 属于其他元素），弧检验同样 0/1。精度量化需富样例（曲线元素带 bbox 的真实模型，外部依赖）；当前最近前驱键归属保持启发式置信级 | TestBindingPrecision（0/109 重叠） | 观察 | 富样例后重跑 |
 
 | R79 | **★富样例到手 = 双版本变体齐备**：用户下载 `rac_advanced_sample_project.rvt`（15.3MB，Autodesk-Forge/viewer-navigation.sample GitHub 镜像）= **Revit 2015** 文件——① BFI **rev=10** 布局（R58 预言场景：字段序不同，CentralModelIdentity 处截断，需 rev 分派布局）；② **PartitionStreamVersion 7**（2022/23 为 9）——三子流 101/102/103 同构（6.9/35/26MB）；③ **v7 记录环同框架验证**：class-101 头 `[counter][87][1218][0][0xffff…]` + R45 记录环走读 2,893 条干净（@524KB 首个脏页停止）；④ class-103 v7 头 = GeomStep 型目录（`[counter][c1=193][0x76][2][0x2cb4]` 12B 项） | TestXRichV7 + v7 走读 | 观察 | v7 元素/G 树/GInfo 布局=下一战役（M11） |

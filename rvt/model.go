@@ -23,6 +23,9 @@ type Model struct {
 	// element-counter keyed block contexts (R72/R77).
 	BoundCurves []geom.BoundLine
 	BoundArcs   []geom.BoundArc
+	// InlineCurves: GLine objects inline in the class-103 G trees
+	// (model-space segments — R86).
+	InlineCurves []geom.Line
 }
 
 // geometrySubStreamClass is the class-103 page tag (both samples).
@@ -53,6 +56,9 @@ func (p *Partition) Model(version string) *Model {
 	}
 	if geo != nil {
 		m.collectBReps(geo.Data, lookup)
+		if gl, ok := classindex.Index(version, "OdBmGLine"); ok {
+			m.InlineCurves = ScanInlineGLines(geo.Data, int16(gl))
+		}
 		var store *SubStream
 		for _, ss := range p.SubStreams {
 			if ss.Class == geometryStoreClass {

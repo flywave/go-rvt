@@ -6,6 +6,7 @@ import (
 	"math"
 	"sort"
 
+	"github.com/flywave/go-rvt/rvt/classindex"
 	"github.com/flywave/go-rvt/rvt/geom"
 )
 
@@ -511,4 +512,51 @@ func ScanGArcsKeyed(data []byte, keys []KeyedBinding) []geom.BoundArc {
 		off += 78
 	}
 	return out
+}
+
+// Inline G-node objects (findings R86): the class-103 G trees carry inline
+// fast-path objects as [i16 class][payload] — e.g. GLine(1798) objects are
+// [i16 1798][f64 origin][f64 second-point] (48B payload). These hold the
+// model-space line geometry of the G trees.
+
+// ScanInlineGLines collects inline GLine[f64×6] objects from the class-103
+// G trees with plausibility gates (finite, |v| <= 1e5 ft, non-degenerate).
+func ScanInlineGLines(data []byte, gLine int16) []geom.Line {
+	var out []geom.Line
+	for off := 0; off+2+48 <= len(data); off += 2 {
+		if int16(binary.LittleEndian.Uint16(data[off:])) != gLine {
+			continue
+		}
+		var p [6]float64
+		plain := true
+		nonzero := false
+		for k := 0; k < 6; k++ {
+			p[k] = math.Float64frombits(binary.LittleEndian.Uint64(data[off+2+k*8:]))
+			if math.IsNaN(p[k]) || math.IsInf(p[k], 0) || math.Abs(p[k]) > 1e5 {
+				plain = false
+				break
+			}
+			if p[k] != 0 {
+				nonzero = true
+			}
+		}
+		if !plain || !nonzero {
+			continue
+		}
+		dx, dy, dz := p[3]-p[0], p[4]-p[1], p[5]-p[2]
+		if math.Abs(dx)+math.Abs(dy)+math.Abs(dz) < 1e-9 {
+			continue
+		}
+		out = append(out, geom.Line{
+			Origin:    geom.Point3{X: p[0], Y: p[1], Z: p[2]},
+			Direction: geom.Point3{X: p[3], Y: p[4], Z: p[5]},
+		})
+	}
+	return out
+}
+
+// classindexIndex2023 resolves a class name in the 2023 table (helper for
+// tests and tools that do not carry a version).
+func classindexIndex2023(name string) (int16, bool) {
+	return classindex.Index("2023", name)
 }
