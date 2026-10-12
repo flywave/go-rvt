@@ -142,6 +142,8 @@
 
 | R91 | **组间区归属基础设施落地（M11 收口）**：`ScanInlineGArcsAttributed`（EP 有限/幅值门 + 轴非零正交（相对）门 + 半径门 + 最近前驱树 counter 归属）——富样例实测 **1 条弧归入已知元素 291951**（R=2.64ft，C=原点）；更严的相对正交门下 R90 的 9 命中收敛为 1（其余为 dot≤500 松阈假阳性）——**富样例实际 GArc 对象极少**（与 378 目录噪声结论一致）。归属框架（最近前驱树）+ 门集就绪，富样例到位即用 | ScanInlineGArcsAttributed + TestXAttributed（1/1 已知元素） | 观察 | 元素 291951 的弧语义；更多命中需富样例 |
 
+| R95 | **GArc/GNurbSpline 内联前缀=工具边界（M11 收口）**：富样例 v7 class-103 中 GArc 正交轴命中=0（加各种前缀偏移均 0）——**GNode 基链前缀（GInfo 懒/内联判定）需 per-class writer vtable 运行时解析**，nm/objdump 静态分析不可达。GLine 的紧凑形式（无 GInfo 前缀）为特例而非通则。ScanInlineGArcs/ScanInlineGNurbSplines 扫描器代码保留待 Ghidra 级或动态分析续接。已验证交付不变（GLine 3,874 EndParams 模型 + GArc 3,972 内容锚定 + 全部元素/拓扑/视图层） | 富样例 v7 多偏移扫描 + 正交门探针 | 观察 | Ghidra 12.1.4 已在机（~/tools/ghidra_12.1.4_PUBLIC）——后续可用 analyzeHeadless 反编译 per-class writer vtable |
+
 | R86 | **★G 几何真身定位（M9 目标达成）**：**G 节点几何以快路径内联形式存在于 class-103 树内**——`[i16 class][payload]`（无前缀，R69 点/向量规则的自然延伸）：`ScanInlineGLines` 扫 `[GLine 1798][f64×6]`（Origin+第二点）= **3,920 条线段**（3,916 非退化；样例 (0,0.0417,0)→(0,0,0)=0.5 英寸真实线段；GBrep 同位假阳性基线仅 14）；`[cls][0]` 块（class-102）统一为类型化子引用表（R72/R82 归纳正确）；此前"几何缺失"是搜索位置错误（class-102 而非 class-103）。API：ScanInlineGLines + Model.InlineCurves | rvt/geometry.go ScanInlineGLines + 测试（GBrep 基线对照） | 观察→推断 | 内联对象↔元素归属（经树 counter，M11）；GArc/GNurbSpline 同法内联扫描（预期同构） |
 
 | R86a | **★R86 勘误：内联线提取不可信（撤回）**：复检 7,696 个 `[GLine][f64×6]` 候选——**3,715 个为纯 denormal**（目录 id 对 (id1\|id2<<32) 组成的伪 f64，通过"非零+<1e5"门），其余 3,981 含正常幅值分量但未确认（同一 [GLine][0] 头后既可跟坐标也可跟引用串）。真 GLine 内联布局回到未解状态（与 GArc 同属 **GInfo 前缀问题**）；Model.InlineCurves 标记实验性。已验证几何回到：记录环线 109 + 内容锚定弧 3,972（单位正交+正半径物理门，目录数据无法通过）+ 双 bbox 925 + BRep 493 | TestXVerifyR86 幅值分布检查 | 观察 | GInfo 前缀模型（M11 主线） |
