@@ -84,8 +84,11 @@ go-dgn 侧仅保留指引（`go-dgn/analysis/04-rvt/README.md`）。
    FamilySymbol 尾=f64 坐标数组；TailKind 分类器（ids/floats64/floats32/
    scalars/mixed）+ ExtendedTail 结构标记（R64）
    - 未竟：各类扩展尾逐字段 schema；4B 值↔属性名映射
-11. 🔎 **M7 G blob 定界（边界探察，未完）**：G 标记双子流分布（102/103），
-    真对象 blob 与目录交错——指向规则为下一 REA 战役入口（R65）
+11. ✅ **M7 G 树流（已落地，第 11 轮）**：class-103 = 按 deposit 键控的 G 树块
+    （[counter][8B][GElement][对象序列]，10,537 组/89% counter 联动）；内联
+    GRep 族对象双 bbox 字节相同判据 → 925 bbox 全合理、829 元素带世界包围盒；
+    子引用 [i16 class][u32 id] 采集；ScanGTrees + geom.GTree/GRef +
+    geom.Element.BBox（R67）。曲线/网格 payload 在 class-102（新边界，M9）
 12. ✅ **M8 对象模型声明（已落地）**：`rvt/geom` 契约包——Element/View/BRep
     已填充（77,217 元素/1 视图/493 BRep @2023 实测），曲线/网格/实例类型
     按 R54 schema 声明待填；`Partition.Model(version)` 装配器 +

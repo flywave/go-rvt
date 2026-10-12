@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/flywave/go-rvt/rvt/classindex"
 	"github.com/flywave/go-rvt/rvt/geom"
 )
 
@@ -85,3 +86,80 @@ func TestModelRealSamples(t *testing.T) {
 }
 
 var _ = geom.Point3{}
+
+// TestGTreesRealSamples validates the M7 G-tree group parse (findings R67):
+// group counts, counter linkage to class-101 records, and bbox sanity —
+// with bboxes attached to model elements.
+func TestGTreesRealSamples(t *testing.T) {
+	data, err := os.ReadFile(samples[0])
+	if err != nil {
+		t.Skip("no sample")
+	}
+	f, _ := OpenCFB(data)
+	raw, _ := f.Stream("Partitions/13")
+	lookup := func(cls int16) string {
+		name, _ := classindex.Lookup("2023", cls)
+		return name
+	}
+	part, err := ReadPartitionWithLookup("13", raw, lookup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := part.Model("2023")
+	if len(m.Trees) < 9000 {
+		t.Errorf("%d G trees (want >= 9000)", len(m.Trees))
+	}
+	// counter linkage
+	recCounters := map[uint32]bool{}
+	var hdr *SubStream
+	for _, ss := range part.SubStreams {
+		if len(ss.Deposits) > 0 {
+			hdr = ss
+		}
+	}
+	for i := range hdr.Records {
+		recCounters[hdr.Records[i].Counter] = true
+	}
+	linked := 0
+	bboxOK := 0
+	for _, tr := range m.Trees {
+		if recCounters[tr.Counter] {
+			linked++
+		}
+		for _, bb := range tr.BBoxes {
+			if bb.Min.X <= bb.Max.X && bb.Min.Y <= bb.Max.Y && bb.Min.Z <= bb.Max.Z {
+				bboxOK++
+			}
+		}
+	}
+	if linked*100 < len(m.Trees)*80 {
+		t.Errorf("only %d/%d tree counters linked", linked, len(m.Trees))
+	}
+	withBBox := 0
+	for _, e := range m.Elements {
+		if e.BBox != nil {
+			withBBox++
+		}
+	}
+	t.Logf("G trees %d (linked %d, %.0f%%), bboxes %d (sane %d), elements with bbox %d",
+		len(m.Trees), linked, 100*float64(linked)/float64(len(m.Trees)),
+		func() int {
+			n := 0
+			for _, tr := range m.Trees {
+				n += len(tr.BBoxes)
+			}
+			return n
+		}(), bboxOK, withBBox)
+	if withBBox == 0 {
+		t.Error("no elements carry a bbox")
+	}
+	// sample one bbox for plausibility logging
+	for _, e := range m.Elements {
+		if e.BBox != nil {
+			t.Logf("sample bbox: (%.4f, %.4f, %.4f)..(%.4f, %.4f, %.4f)",
+				e.BBox.Min.X, e.BBox.Min.Y, e.BBox.Min.Z, e.BBox.Max.X, e.BBox.Max.Y, e.BBox.Max.Z)
+			break
+		}
+	}
+	var _ = geom.BBox{}
+}

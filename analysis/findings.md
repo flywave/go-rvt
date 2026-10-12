@@ -112,6 +112,12 @@
 
 | R65 | **G 对象 blob 定界=下一战役入口（边界探察）**：G 标记在 class-102（GLine×13158/51MB）与 class-103（×17803/23.6MB）均出现——真对象 blob 与目录像目交错（@492 一带的 [i16 class][u32 id] 即目录项而非对象头），指向规则未解；GInfo 疑似=3282（GeomStep 目录 field12 恒值，未证实）。定位真 blob 需先解目录→对象指向 | 双子流标记普查 + 头字节走读 | 观察 | 目录→blob 指向、blob 内 base 类嵌套序 |
 
+## M7 G 树战役轮（第 11 轮）
+
+| ID | 结论 | 证据 | 置信度 | 边界/未知 |
+|---|---|---|---|---|
+| R67 | **★class-103 = 按元素 G 树流（M7 定案）**：G 区 = GeomStep 目录 + **按 deposit 键控的 G 树块** `[u32 counter][8B key][i16 2073 GElement][u32 counter]…对象序列…`（块体延至下一严格组起点；2023: 10,537 组/10,477 唯一 counter，89% 与 class-101 记录 counter 联动）。块内对象序列混合：**内联 GRep 族对象**（`[i16 class][GeomBBox 48B][GTightBBox 48B]`——**双 bbox 字节相同**为强判据；ObjectType/GRepFlags i32 对随后的 `ffffffff 00000000 ffffffff`+GInfoFlags(0x88004=DefaultModel) 尾）与**类型化子引用**（`[i16 class][u32 child-id]`，id 按类连续）。扫描收紧后：925 个 bbox **100% 合理**（实测样本 (-0.0475,-0.0197,0)..(0.0082,0.0278,0) 英尺），829 元素带世界包围盒。API：ScanGTrees/GTree/GRef + geom.Element.BBox + Model.Trees | rvt/geometry.go ScanGTrees + TestGTreesRealSamples | 观察→推断 | 双 bbox 相同=紧致时相等（非紧致可能不同——潜在漏检）；GArc=2040 修正记录；曲线/网格 payload 在 class-102（下一战役） |
+
 ## M8 对象模型声明轮
 
 | ID | 结论 | 证据 | 置信度 | 边界/未知 |

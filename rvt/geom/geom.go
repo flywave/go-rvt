@@ -39,6 +39,10 @@ type Element struct {
 	MiscID         int32
 	ViewRulesFlags uint32 // rejected-view-types bitmask
 	ABFlags        uint32
+
+	// BBox is the element's world bounding box from its G tree (nil when
+	// the element has no inline Geometry in the class-103 region — R67).
+	BBox *BBox
 }
 
 // View is one view's element membership, extracted from DBViewPlan
@@ -122,4 +126,22 @@ type Instance struct {
 	Transform [4][3]float64 // 4x3 affine (row-major)
 	HasScale  bool
 	TagID     int32
+}
+
+// GRef is one typed child reference of a G tree ([i16 class][u32 id] —
+// child ids are sequential per class in the class-103 G region).
+type GRef struct {
+	Class int16  `json:"class"`
+	Name  string `json:"name,omitempty"`
+	ID    uint32 `json:"id"`
+}
+
+// GTree is one deposit's G-node group: the element's inline bounding boxes
+// (when a Geometry child is present) and its child references (findings
+// R67).
+type GTree struct {
+	Counter uint32 `json:"counter"`
+	Offset  int    `json:"-"`
+	BBoxes  []BBox `json:"bboxes,omitempty"`
+	Refs    []GRef `json:"refs,omitempty"`
 }

@@ -16,6 +16,7 @@ type Model struct {
 	Elements []geom.Element
 	Views    []geom.View
 	BReps    []geom.BRep
+	Trees    []geom.GTree
 }
 
 // geometrySubStreamClass is the class-103 page tag (both samples).
@@ -43,6 +44,27 @@ func (p *Partition) Model(version string) *Model {
 	}
 	if geo != nil {
 		m.collectBReps(geo.Data, lookup)
+		gEl, ok := classindex.Index(version, "OdBmGElement")
+		if ok {
+			m.Trees = ScanGTrees(geo.Data, func() int {
+				gi := ParseGeometryIndex(geo.Data)
+				return gi.DataOffset
+			}(), int16(gEl), lookup)
+			// attach bboxes to elements by deposit counter
+			byCounter := map[uint32]*geom.Element{}
+			for i := range m.Elements {
+				byCounter[m.Elements[i].ID] = &m.Elements[i]
+			}
+			for _, tr := range m.Trees {
+				if len(tr.BBoxes) == 0 {
+					continue
+				}
+				if e := byCounter[tr.Counter]; e != nil && e.BBox == nil {
+					bb := tr.BBoxes[0]
+					e.BBox = &bb
+				}
+			}
+		}
 	}
 	sort.Slice(m.Elements, func(i, j int) bool { return m.Elements[i].ID < m.Elements[j].ID })
 	sort.Slice(m.Views, func(i, j int) bool { return m.Views[i].ID < m.Views[j].ID })

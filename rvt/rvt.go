@@ -182,10 +182,18 @@ func Open(data []byte) (*Metadata, error) {
 	}
 	if biggest != nil {
 		m := biggest.Model(md.RevitVersion)
+		withBBox := 0
+		for _, e := range m.Elements {
+			if e.BBox != nil {
+				withBBox++
+			}
+		}
 		md.Model = &ModelSummary{
 			Elements: len(m.Elements),
 			Views:    len(m.Views),
 			BReps:    len(m.BReps),
+			GTrees:   len(m.Trees),
+			WithBBox: withBBox,
 		}
 	}
 	sort.Slice(md.Partitions, func(i, j int) bool { return md.Partitions[i].Name < md.Partitions[j].Name })
@@ -248,4 +256,6 @@ type ModelSummary struct {
 	Elements int `json:"elements"`
 	Views    int `json:"views,omitempty"`
 	BReps    int `json:"breps,omitempty"`
+	GTrees   int `json:"g_trees,omitempty"`
+	WithBBox int `json:"with_bbox,omitempty"`
 }

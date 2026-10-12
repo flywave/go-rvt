@@ -1,9 +1,23 @@
 package rvt
 
 import (
+	"bytes"
 	"encoding/binary"
+	"math"
 	"sort"
+
+	"github.com/flywave/go-rvt/rvt/geom"
 )
+
+// isBBoxClass: GRep-family classes whose objects carry the twin-bbox head
+// (Geometry/GBrep/GRep/GElement per the reader schemas — R54/R67).
+func isBBoxClass(cls int16, lookup func(int16) string) bool {
+	switch lookup(cls) {
+	case "OdBmGeometry", "OdBmGBrep", "OdBmGRep", "OdBmGElement":
+		return true
+	}
+	return false
+}
 
 // Class-103 sub-stream layout (REA round 6, dual-sample byte-validated —
 // findings R53):
@@ -184,4 +198,109 @@ func ScanGCatalogRuns(data []byte, from int, lookup func(int16) string) []GCatal
 		off += 2
 	}
 	return runs
+}
+
+// G-tree groups (findings R67): the class-103 geometry region is organized
+// as per-deposit G-tree blocks:
+//
+//	[u32 counter][8B key][i16 GElement][u32 counter]…object sequence…
+//
+// The object sequence mixes inline objects — e.g. Geometry(2160) carrying
+// two inline f64 bboxes (GeomBBox + GTightBBox, 48B each) — and typed child
+// references ([i16 class][u32 child-id], ids sequential per class). GInfo
+// blocks end with GInfoFlags (DefaultModel = 0x00088004).
+
+// GTree is one deposit's G-node group (declared in rvt/geom).
+type GTree = geom.GTree
+
+// isPlausibleBBox reports whether 48 bytes look like a sane f64 bbox
+// (min <= max per axis, magnitudes within internal-feet range, non-all-zero).
+func isPlausibleBBox(b []byte) bool {
+	var v [6]float64
+	for k := 0; k < 6; k++ {
+		v[k] = math.Float64frombits(binary.LittleEndian.Uint64(b[k*8:]))
+		if math.IsNaN(v[k]) || math.IsInf(v[k], 0) || math.Abs(v[k]) > 1e7 {
+			return false
+		}
+	}
+	for k := 0; k < 3; k++ {
+		if v[k] > v[k+3] {
+			return false
+		}
+	}
+	for k := 0; k < 6; k++ {
+		if v[k] != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// ScanGTrees walks the class-103 data region after the GeomStep directory
+// and collects GElement tree groups: strict group starts are
+// [u32 counter][8B][i16 GElement][u32 counter]; each group body extends to
+// the next strict start. Within a body, inline Geometry bboxes and typed
+// child references are collected.
+func ScanGTrees(data []byte, from int, gElement int16, lookup func(int16) string) []GTree {
+	isGroupStart := func(off int) bool {
+		if off+18 > len(data) {
+			return false
+		}
+		ctr := binary.LittleEndian.Uint32(data[off:])
+		return ctr != 0 &&
+			int16(binary.LittleEndian.Uint16(data[off+12:])) == gElement &&
+			binary.LittleEndian.Uint32(data[off+14:]) == ctr
+	}
+	var trees []GTree
+	pos := from
+	for pos < len(data) {
+		if !isGroupStart(pos) {
+			pos++
+			continue
+		}
+		g := GTree{Counter: binary.LittleEndian.Uint32(data[pos:]), Offset: pos}
+		next := len(data)
+		for k := pos + 18; k+18 <= len(data); k++ {
+			if isGroupStart(k) {
+				next = k
+				break
+			}
+		}
+		body := data[pos+18 : next]
+		for k := 0; k+2 <= len(body); k += 2 {
+			cls := int16(binary.LittleEndian.Uint16(body[k:]))
+			// inline GRep-family object: [i16 cls][GeomBBox 48B][GTightBBox 48B]
+			// — the two boxes are byte-identical on real objects (R67)
+			if k+2+96 <= len(body) &&
+				isBBoxClass(cls, lookup) &&
+				isPlausibleBBox(body[k+2:k+50]) &&
+				bytes.Equal(body[k+2:k+50], body[k+50:k+98]) {
+				bb := geom.BBox{
+					Min: geom.Point3{
+						X: math.Float64frombits(binary.LittleEndian.Uint64(body[k+2:])),
+						Y: math.Float64frombits(binary.LittleEndian.Uint64(body[k+10:])),
+						Z: math.Float64frombits(binary.LittleEndian.Uint64(body[k+18:])),
+					},
+					Max: geom.Point3{
+						X: math.Float64frombits(binary.LittleEndian.Uint64(body[k+26:])),
+						Y: math.Float64frombits(binary.LittleEndian.Uint64(body[k+34:])),
+						Z: math.Float64frombits(binary.LittleEndian.Uint64(body[k+42:])),
+					},
+				}
+				g.BBoxes = append(g.BBoxes, bb)
+				k += 98
+				continue
+			}
+			if name := lookup(cls); name != "" && cls > 16 && k+6 <= len(body) {
+				id := binary.LittleEndian.Uint32(body[k+2:])
+				if id <= maxElementID {
+					g.Refs = append(g.Refs, geom.GRef{Class: cls, Name: name, ID: id})
+					k += 4
+				}
+			}
+		}
+		trees = append(trees, g)
+		pos = next
+	}
+	return trees
 }
