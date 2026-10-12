@@ -23,10 +23,9 @@ type Model struct {
 	// element-counter keyed block contexts (R72/R77).
 	BoundCurves []geom.BoundLine
 	BoundArcs   []geom.BoundArc
-	// InlineCurves: UNVERIFIED candidate [GLine][f64×6] patterns from the
-	// class-103 trees (R86a: catalog-pair denormals pollute the scan; the
-	// true GLine inline layout awaits the GInfo prefix model). Do not treat
-	// as validated geometry.
+	// InlineCurves: validated GLine instances from the class-103 trees
+	// (R88 EndParams-prefix model: [EndParams 2×f64][Origin 3×f64]
+	// [Direction 3×f64]; 3,874 non-degenerate segments on 2023).
 	InlineCurves []geom.Line
 }
 

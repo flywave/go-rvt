@@ -520,37 +520,38 @@ func ScanGArcsKeyed(data []byte, keys []KeyedBinding) []geom.BoundArc {
 // [i16 1798][f64 origin][f64 second-point] (48B payload). These hold the
 // model-space line geometry of the G trees.
 
-// ScanInlineGLines collects inline GLine[f64×6] objects from the class-103
-// G trees with plausibility gates (finite, |v| <= 1e5 ft, non-degenerate).
+// ScanInlineGLines collects inline GLine objects from the class-103 trees
+// with the EndParams prefix model (findings R88): body = [EndParams 2×f64]
+// [Origin 3×f64][Direction 3×f64] (GNode lazy fields deferred; GCurve.
+// EndParams inline). Gates: all finite, |v| <= 1e5, direction non-degenerate.
 func ScanInlineGLines(data []byte, gLine int16) []geom.Line {
 	var out []geom.Line
-	for off := 0; off+2+48 <= len(data); off += 2 {
+	for off := 0; off+2+64 <= len(data); off += 2 {
 		if int16(binary.LittleEndian.Uint16(data[off:])) != gLine {
 			continue
 		}
-		var p [6]float64
+		var f [8]float64
 		plain := true
-		nonzero := false
-		for k := 0; k < 6; k++ {
-			p[k] = math.Float64frombits(binary.LittleEndian.Uint64(data[off+2+k*8:]))
-			if math.IsNaN(p[k]) || math.IsInf(p[k], 0) || math.Abs(p[k]) > 1e5 {
+		for k := 0; k < 8; k++ {
+			f[k] = math.Float64frombits(binary.LittleEndian.Uint64(data[off+2+k*8:]))
+			if math.IsNaN(f[k]) || math.IsInf(f[k], 0) || math.Abs(f[k]) > 1e5 {
 				plain = false
 				break
 			}
-			if p[k] != 0 {
-				nonzero = true
-			}
 		}
-		if !plain || !nonzero {
+		if !plain {
 			continue
 		}
-		dx, dy, dz := p[3]-p[0], p[4]-p[1], p[5]-p[2]
+		if f[0] == f[1] { // degenerate EndParams = catalog noise
+			continue
+		}
+		dx, dy, dz := f[5]-f[2], f[6]-f[3], f[7]-f[4]
 		if math.Abs(dx)+math.Abs(dy)+math.Abs(dz) < 1e-9 {
 			continue
 		}
 		out = append(out, geom.Line{
-			Origin:    geom.Point3{X: p[0], Y: p[1], Z: p[2]},
-			Direction: geom.Point3{X: p[3], Y: p[4], Z: p[5]},
+			Origin:    geom.Point3{X: f[2], Y: f[3], Z: f[4]},
+			Direction: geom.Point3{X: f[5], Y: f[6], Z: f[7]},
 		})
 	}
 	return out
@@ -597,18 +598,19 @@ func dot3(b []byte) float64 {
 	return x1*x2 + y1*y2 + z1*z2
 }
 
-// ScanInlineGArcs collects GArc instances ([i16 GArc][XDir 24][YDir 24]
-// [Radius 8][Center 24], gated on unit orthogonal axes and positive radius)
-// from the class-103 trees, attributed via tree ranges.
+// ScanInlineGArcs collects GArc instances with the EndParams prefix model
+// (R88): [i16 GArc][EndParams 2×f64][XDir 24][YDir 24][Radius 8][Center 24],
+// gated on finite values, unit orthogonal axes and positive radius, from
+// the class-103 trees, attributed via tree ranges.
 func ScanInlineGArcs(data []byte, gArc int16, trees []GTree, lookup func(int16) string) []InlineArc {
 	var out []InlineArc
 	for _, tr := range trees {
 		body := data[tr.Offset+18 : tr.End]
-		for k := 0; k+2+88 <= len(body); k += 2 {
+		for k := 0; k+2+96 <= len(body); k += 2 {
 			if int16(binary.LittleEndian.Uint16(body[k:])) != gArc {
 				continue
 			}
-			p := body[k+2:]
+			p := body[k+2+16:] // skip EndParams (2×f64)
 			fin := true
 			for kk := 0; kk < 80; kk += 8 {
 				vv := math.Float64frombits(binary.LittleEndian.Uint64(p[kk:]))

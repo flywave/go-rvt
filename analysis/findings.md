@@ -142,6 +142,8 @@
 
 | R86a | **★R86 勘误：内联线提取不可信（撤回）**：复检 7,696 个 `[GLine][f64×6]` 候选——**3,715 个为纯 denormal**（目录 id 对 (id1\|id2<<32) 组成的伪 f64，通过"非零+<1e5"门），其余 3,981 含正常幅值分量但未确认（同一 [GLine][0] 头后既可跟坐标也可跟引用串）。真 GLine 内联布局回到未解状态（与 GArc 同属 **GInfo 前缀问题**）；Model.InlineCurves 标记实验性。已验证几何回到：记录环线 109 + 内容锚定弧 3,972（单位正交+正半径物理门，目录数据无法通过）+ 双 bbox 925 + BRep 493 | TestXVerifyR86 幅值分布检查 | 观察 | GInfo 前缀模型（M11 主线） |
 
+| R88 | **★EndParams 前缀模型验证（GInfo 问题破口）**：GNode 懒字段（GInfo）入动态段后，GLine 体 = **`[EndParams 2×f64][Origin 3×f64][Direction 3×f64]`**（GCurve.EndParams 内联在前）——严格门（全有限 + EP 非退化 + 方向非退化）通过 **3,874 条真实线段**（样例 (0,0,0)→(0.0278,0,0) = +X 向 0.0278ft 线段；旧模型 7,696 含目录噪声 vs 新模型 3,875 候选/3,874 过门——**EP 非退化判据 killing 目录对**）。R86a 撤回的对象恢复为已验证。GArc 加 EP 后仍 0——其基链更深（GNode.GInfo 内联或字段序不同），待同法对照 | TestInlineCurvesRealSamples（3,874 条）+ prefix 探针 | 观察→推断 | GArc 布局差一层基链；GNurbSpline 同法待验 |
+
 | R87 | **GArc 内联扫描=需基链前缀（边界记录）**：ScanInlineGArcs（固定位置 [GArc][XDir24][YDir24][R8][C24] + 单位正交门 + 有限性门）在双样例 class-103 均为 0——**GArc 体前有 GNode/GCurve 基链变长前缀**（GInfo 对象等），与 GLine 的紧凑形式不同；精确 GArc 扫描需 GInfo 前缀长度模型（M11 剩余）。ScanInlineGArcs 保留（前缀模型就绪后即用） | 双样例扫描（0 命中，NaN 门修正后） | 观察 | GInfo 前缀长度模型 |
 
 | R78 | **绑定精度检验=当前样例不可判定**：bbox 包含测试（曲线端点 ∈ 元素世界 bbox ±1ft）在 2023 样例上无法执行——109 条绑定曲线的所属元素**无一具有 G 树 bbox**（925 个 bbox 属于其他元素），弧检验同样 0/1。精度量化需富样例（曲线元素带 bbox 的真实模型，外部依赖）；当前最近前驱键归属保持启发式置信级 | TestBindingPrecision（0/109 重叠） | 观察 | 富样例后重跑 |
