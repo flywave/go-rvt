@@ -114,6 +114,9 @@ func Parse(data []byte) (*FileInfo, error) {
 	if err := p.skip(10); err != nil { // u64 + u16 reserved (observed zero)
 		return nil, fmt.Errorf("%w: %v", Err, err)
 	}
+	if fi.Revision > 0 && fi.Revision <= 13 {
+		return parseLegacy(p, fi)
+	}
 	if fi.SavedInVersion, err = p.str(); err != nil {
 		return nil, fmt.Errorf("%w: SavedInVersion: %v", Err, err)
 	}
@@ -254,4 +257,19 @@ func trimANSICRLF(b []byte) []byte {
 		b = b[2:]
 	}
 	return b
+}
+
+// parseLegacy extracts the version string for rev <= 13 files (rev-10
+// layout: strings [Version][Build][Path] then binary block — no workshared /
+// GUID fields). SavedInVersion is the primary extraction target.
+func parseLegacy(p *parser, fi *FileInfo) (*FileInfo, error) {
+	var err error
+	if fi.SavedInVersion, err = p.str(); err != nil {
+		return fi, fmt.Errorf("%w: rev<=13 Version: %v", Err, err)
+	}
+	// best-effort: try one more string as path
+	if fi.LastSavePath, err = p.str(); err != nil {
+		fi.LastSavePath = ""
+	}
+	return fi, nil
 }
