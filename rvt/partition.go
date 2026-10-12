@@ -429,10 +429,15 @@ func (p *Partition) assembleSubStreams(lookup func(int16) string) {
 	for _, ss := range byClass {
 		ss.LogicalBytes = len(ss.Data)
 		ss.Deposits = scanDeposits(ss.Data)
-		// Object-record walk: only the deposit-bearing sub-stream carries
-		// the validated [counter][size][body][echo] framing.
-		if len(ss.Deposits) > 0 {
+		// Object-record walk: v9 deposit-bearing sub-streams carry the
+		// [counter][size][body][echo] framing after their deposit records;
+		// v7 stores (PartitionStreamVersion 7 — R79) start directly with
+		// records and have no deposit prefix.
+		switch {
+		case len(ss.Deposits) > 0:
 			ss.Records, ss.WalkStats = walkRecords(ss.Data, len(ss.Deposits)*depositRecordSize, lookup)
+		case hasUniformRecordChain(ss.Data):
+			ss.Records, ss.WalkStats = walkRecords(ss.Data, 0, lookup)
 		}
 		p.SubStreams = append(p.SubStreams, ss)
 	}
@@ -525,4 +530,30 @@ func (p *Partition) fillSummary(lookup func(int16) string) {
 	if len(p.Errors) > 0 {
 		info.PageErrors = p.Errors
 	}
+}
+
+// hasUniformRecordChain reports whether data starts with a uniform-class
+// record chain (v7-style stores without a deposit prefix — R79/R80).
+func hasUniformRecordChain(data []byte) bool {
+	pos := 0
+	n := 0
+	var cls int16
+	for pos+12 <= len(data) && n < 4 {
+		size := int(binary.LittleEndian.Uint32(data[pos+4:]))
+		if size < minRecordSize || pos+12+size > len(data) {
+			return false
+		}
+		if binary.LittleEndian.Uint32(data[pos+8+size:]) != uint32(size) {
+			return false
+		}
+		c := int16(binary.LittleEndian.Uint16(data[pos+8:]))
+		if n == 0 {
+			cls = c
+		} else if c != cls {
+			return false
+		}
+		pos += 12 + size
+		n++
+	}
+	return n >= 4
 }

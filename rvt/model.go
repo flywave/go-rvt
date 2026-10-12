@@ -43,7 +43,7 @@ func (p *Partition) Model(version string) *Model {
 	m := &Model{}
 	var geo *SubStream
 	for _, ss := range p.SubStreams {
-		if len(ss.Deposits) > 0 {
+		if len(ss.Deposits) > 0 || len(ss.Records) > 0 {
 			m.collectElements(ss, lookup)
 			m.collectViews(ss, lookup, version)
 		}
