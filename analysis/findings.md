@@ -128,6 +128,8 @@
 
 | R70 | **GArc 内容锚定解码（M9 二收）**：[GLine/GArc][0] 式头不能单独锚定（大量整数数据误配）——改用**内容锚定**：10×f64 窗口 = XDir 单位向量 + YDir 单位向量（dot≈0）+ Radius>0 + Center(3×f64)。`ScanGArcs` 落地：**2023 提取 3,972 条模型空间圆弧**（R=74.27/75.55 ft、C=(-39.86,22.33,-63.25) 等；单位 XDir/YDir 正交），`Model.Arcs` + ModelSummary.Arcs。NurbSpline(2094) 对象定位（degree=4 标志 `04 00 08 01`、knot 计数 69 可见、WPoint 4×f64 数组在尾）——数组帧解码待专项；PolyMesh(2104) 头已见 | rvt/geometry.go ScanGArcs + TestArcsRealSamples + NurbSpline/PolyMesh 探针 | 观察→推断 | NurbSpline/PolyMesh 数组帧；曲线/弧↔元素绑定（deposit 块键） |
 
+| R71 | **deposit 块键与绑定边界（M9 收口）**：class-102 头部存在 deposit 块 `[counter][marker][87][3123]`（412B 小块，仅头部 3 块，counter=deposit 1098306/1098310/1098314 步进 4；3123 为 R68 误读修正）；主体 51MB 用 **G 目录 id 空间**（class-103 树引用的 [class][id]）而非 deposit counter。绑定尝试：`[GLine][idN][GLine][0][payload]` 对儿索引仅 21 项/覆盖树引用 4%——**ref→object 的 id 关联语义 = M10 边界**（需 deposit 写出器级分析或同内容差分扩大样本）。头字段勘误：3123（R68 的 3107 误读修正） | 块扫描 + 对儿索引探针 | 观察 | id 关联语义；主体存储组织 |
+
 ## M8 对象模型声明轮
 
 | ID | 结论 | 证据 | 置信度 | 边界/未知 |
