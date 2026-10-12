@@ -136,6 +136,8 @@
 
 | R73 | **NurbSpline/PolyMesh 差分轮（M9 收口定性）**：① NurbSpline：[2094] 标记 72 处但 `[cls][0]` 精确对象仅 3 个（degree dist 全为 4）——**样例限制**（rac_basic 小样例的样条本就稀少），degree 锚对齐失败因样本不足而非方法；② PolyMesh(2104)：`[cls][0]` 28 个——**头帧破解**：u32 列直方图 `[gstyle=0 ×4][mark 0x20][-1][count 可变(众数 11)][facet 数据…]`（col0-3=零/样式 id、col4=0x20 恒定、col5=-1 哨兵、col6=计数变体、col7+=逐面数据）；Facet 记录尺寸（N-gon 变长）需 FacetedTopology reader 专项 | 列直方图 ×28 样本 | 观察 | Facet 记录布局；NurbSpline 需富样条样例（外部依赖） |
 
+| R78 | **绑定精度检验=当前样例不可判定**：bbox 包含测试（曲线端点 ∈ 元素世界 bbox ±1ft）在 2023 样例上无法执行——109 条绑定曲线的所属元素**无一具有 G 树 bbox**（925 个 bbox 属于其他元素），弧检验同样 0/1。精度量化需富样例（曲线元素带 bbox 的真实模型，外部依赖）；当前最近前驱键归属保持启发式置信级 | TestBindingPrecision（0/109 重叠） | 观察 | 富样例后重跑 |
+
 | R75a | readOverride@0x136306 = 每数据库覆盖钩子（map\<OdBmDatabase\*, function\> 查找+调用），非字节文法解析器——正常路径解析在 InitReader→DepositPE keep/withdraw 链与 DiskManager 运行时缓存之后 | readOverride 反汇编（Rb_tree find + std::function invoke） | 观察 | — |
 
 | R76 | **deposit 文法定性（统一模型）**：withdrawStreamImpl = DiskManager::read 纯包装（运行时缓存，非文法）；keep = DiskManager::write 包装——**deposit 内容文法由 keep() 调用方（G 序列化器）按标准对象信封规则直接写出**（R31/R49/R57），无独立 deposit 文法层。统一假设：deposit = [静态遍历：对象存根（懒节点 6B `[i16 cls][u32 stub]`）][动态段：按队列序的懒节点真值]——6B 存根的解释 = 静态 pass 给排队属性写的占位（如 GLine#10-13 连续 6B 项），几何真值在 deposit 尾部动态段。检验路径：deposit 边界映射（DiskManager 块长 412B×头部块）+ 动态段对齐 | withdrawStreamImpl@0x13545c（DiskManager::read 调用链）+ keep@0x136f98（write 对称）反汇编 | 观察→推断 | 动态段与存根的队列序对齐 = 绑定器实现的关键检验 |

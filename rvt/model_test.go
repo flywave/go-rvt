@@ -278,3 +278,78 @@ func TestKeyedBinding(t *testing.T) {
 	t.Logf("sample: element %d line (%.5f,%.5f,%.5f)->(%.5f,%.5f,%.5f)",
 		b.ElementID, b.Origin.X, b.Origin.Y, b.Origin.Z, b.Direction.X, b.Direction.Y, b.Direction.Z)
 }
+
+// TestBindingPrecision quantifies binding accuracy via bbox containment
+// (R78): a curve attributed to element X should have both endpoints inside
+// X's world bbox (with tolerance). Compares against the random-assignment
+// baseline implied by the element count.
+func TestBindingPrecision(t *testing.T) {
+	data, err := os.ReadFile(samples[0])
+	if err != nil {
+		t.Skip("no sample")
+	}
+	f, _ := OpenCFB(data)
+	raw, _ := f.Stream("Partitions/13")
+	lookup := func(cls int16) string {
+		name, _ := classindex.Lookup("2023", cls)
+		return name
+	}
+	part, err := ReadPartitionWithLookup("13", raw, lookup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := part.Model("2023")
+	bboxOf := map[uint32]geom.BBox{}
+	for _, e := range m.Elements {
+		if e.BBox != nil {
+			bboxOf[e.ID] = *e.BBox
+		}
+	}
+	const tol = 1.0 // internal feet; generous for stub-bbox under-coverage
+	in, out, noBBox := 0, 0, 0
+	for _, b := range m.BoundCurves {
+		bb, ok := bboxOf[b.ElementID]
+		if !ok {
+			noBBox++
+			continue
+		}
+		inside := func(p geom.Point3) bool {
+			return p.X >= bb.Min.X-tol && p.X <= bb.Max.X+tol &&
+				p.Y >= bb.Min.Y-tol && p.Y <= bb.Max.Y+tol &&
+				p.Z >= bb.Min.Z-tol && p.Z <= bb.Max.Z+tol
+		}
+		if inside(b.Origin) && inside(b.Direction) {
+			in++
+		} else {
+			out++
+		}
+	}
+	tested := in + out
+	t.Logf("bbox containment: in=%d out=%d (no-bbox %d untested)", in, out, noBBox)
+	if tested > 0 {
+		t.Logf("containment rate: %.1f%% of %d tested", 100*float64(in)/float64(tested), tested)
+	}
+	// baseline: random element of ~8k elements would rarely contain the line
+	if tested > 20 && float64(in)/float64(tested) < 0.5 {
+		t.Errorf("containment %.1f%% too low for correct attribution", 100*float64(in)/float64(tested))
+	}
+
+	// arcs: center within bbox expanded by radius
+	aIn, aOut := 0, 0
+	for _, b := range m.BoundArcs {
+		bb, ok := bboxOf[b.ElementID]
+		if !ok {
+			continue
+		}
+		if b.Center.X >= bb.Min.X-b.Radius-tol && b.Center.X <= bb.Max.X+b.Radius+tol &&
+			b.Center.Y >= bb.Min.Y-b.Radius-tol && b.Center.Y <= bb.Max.Y+b.Radius+tol &&
+			b.Center.Z >= bb.Min.Z-b.Radius-tol && b.Center.Z <= bb.Max.Z+b.Radius+tol {
+			aIn++
+		} else {
+			aOut++
+		}
+	}
+	if aIn+aOut > 0 {
+		t.Logf("arc center containment: %d/%d (%.1f%%)", aIn, aIn+aOut, 100*float64(aIn)/float64(aIn+aOut))
+	}
+}
