@@ -87,3 +87,19 @@ func isDigits(s string) bool {
 	}
 	return len(s) > 0
 }
+
+// Index is the reverse lookup: class name → index for the given Revit
+// version. ok is false when the version or class name is unknown.
+func Index(version, className string) (index int16, ok bool) {
+	t, found := tables[year(version)]
+	if !found {
+		return 0, false
+	}
+	// tables are small (≈3k entries); linear scan on demand
+	for idx, name := range t {
+		if name == className {
+			return idx, true
+		}
+	}
+	return 0, false
+}

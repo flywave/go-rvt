@@ -67,10 +67,28 @@ itemMode（13 的子调度 @0x2876fe）：0/6=标量（ctx vcall+0x10）、1=定
   后随 `00 00` 属 ElementHeader 对象体首属性，**不是 u32 类索引的高半字**。旧"u32 类索引"解读作废（R30）。
 - 记录外层 [counter][size] 包装仍在分区子流层（PartitionStreamDataReader 语境），非本信封——待 #10 续追。
 
-## 4. 未知挂账
+## 5. 核心目录类属性表（第 5 轮收口，TB_Database/TB_Main 构造器提取）
 
-- OdStringReader/OdGUIDReader 磁盘布局（外部库实现，E 头文件或样例对拍可解）
-- getFieldType 枚举名（实现外部；按行为命名表 §2 为准）
-- case 3/10、4/5 语义差；vtable+0x68 返回 9 的 wrap 条件语义
-- [counter][size] 记录包装的消费点（分区子流循环）
-- UnitSystem 枚举全表（#4 未做）
+**OdBmElementHeader（i16 类索引=1398@2023/1340@2022——分区对象记录的类）**：
+RegenHistory:obj9, CategoryId:13, FamilyId:13, OwnerViewId:13, DesignOptionId:13,
+UnplacedOwnerId:13, MiscId:13, ViewRules:obj9, AbFlags4Bytes:i32, ClassDef:托管obj14,
+BBox:obj9, Parents:obj9, OriginalElementId:i64, CreationDate:i32, LastModificationDate:i32,
+LastUserModificationDate:i32, CircMap:map271
+
+⇒ **分区页数据的 [u32 counter][u32 size][i16 1398][ElementHeader 属性体…]** 记录
+即标准信封+ElementHeader；counter/size 为分区页级包装（size≈对象字节数 [推断]）。
+
+**OdBmElemRec（类索引1366@2023）——元素→分区路由记录**：
+ObjectId:13, History:obj9, **PartitionId:i32**, OwningElementId:13, ElemIdSet:269, MRU:13
+
+**OdBmElemTable（1370@2023，Global/ElemTable 内容类）**：
+Elements:obj265, GraveyardRecs:obj265, LastHandle:i64, ExpandAllOnLoad:bool,
+VisibleElements:269, LastElementIdOverride:bool, PlacementNumber:i32 +（切割/粘贴/组映射族）…
+——与 02-elemtable.md 的 28B 头部实测（id,id,0,depA,depB,0,-1）对应关系待对拍
+（28B 或为简化版轻量索引，非完整 ElemTable 对象）。
+
+## 6. 已知未决（信封层）
+
+- [counter][size] 包装的精确消费者（分区页 payload 循环）
+- queue id（ElementId 盘上标量）宽度
+- Variant::Type → disk fieldType 映射

@@ -63,6 +63,12 @@ go-dgn 侧仅保留指引（`go-dgn/analysis/04-rvt/README.md`）。
    77,213/77,251 条，GStyleElem/CategoryElem/CurveElem…模型构成直接可见，R50）；
    动态属性段=位压缩 token 流（R52，有界挂账）
    - 未竟：动态段 token 位格式；G* 字段级序列化（下轮战役主目标）
+7. ✅ **M5 几何路由层（已落地，第 6 轮 REA）**：class-103=几何 deposit 流定案——
+   18B 定形目录（counter 与 class-101 同域 100% 联动）+ G 对象区（i16 信封；
+   2023: GLine×17803/GElement×5868/Geometry×1652…）；`rvt/geometry.go`
+   ParseGeometryIndex/GMarkerCensus；G* reader schema 链提取
+   （GNode/GRep/GElement/GPoint/GLine/GBrep/GEdge/GEdgeLoop，R54）
+   - 未竟：OBJREF 目标类 schema（Coord/bbox/GInfo）；G 对象逐个定界解码
 
 ## 包结构
 
