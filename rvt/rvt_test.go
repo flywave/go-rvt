@@ -6,9 +6,20 @@ import (
 	"testing"
 )
 
+// testdataDir returns the path to the RVT test fixtures. Tests use
+// package-relative testdata/ which is populated manually (see testdata/README.md).
+func testdataDir() string {
+	for _, dir := range []string{"testdata", "../rvt/testdata"} {
+		if fi, err := os.Stat(dir); err == nil && fi.IsDir() {
+			return dir
+		}
+	}
+	return ""
+}
+
 var samples = []string{
-	"/Users/xuning/Downloads/2023 racbasicsampleproject (2).rvt",
-	"/Users/xuning/Downloads/2022 rstadvancedsampleproject (1).rvt",
+	"testdata/rac_basic_2023.rvt",
+	"testdata/rst_advanced_2022.rvt",
 }
 
 func TestOpenRejectsNonCFB(t *testing.T) {

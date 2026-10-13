@@ -13,7 +13,7 @@ import (
 	"github.com/flywave/go-rvt/rvt/classindex"
 )
 
-const richSample = "/tmp/rich_sample.rvt"
+var richSample = testdataDir() + "/rac_advanced_2017.rvt"
 
 func TestV7Model(t *testing.T) {
 	data, err := os.ReadFile(richSample)

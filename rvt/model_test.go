@@ -486,7 +486,7 @@ func TestPolyMeshAndNurbScan(t *testing.T) {
 		path, year, part string
 	}{
 		{samples[0], "2023", "Partitions/13"},
-		{richSample, "2017", "Partitions/3"},
+		{testdataDir() + "/rac_advanced_2017.rvt", "2017", "Partitions/3"},
 	} {
 		data, err := os.ReadFile(tc.path)
 		if err != nil {
