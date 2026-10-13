@@ -69,6 +69,10 @@ serializeObject → ObjectPtrWriter::write → OdBmObjectPtrWriter::write =
   GArc 轴场偏移未解（R102b 边界）；GRep 无 GInfo 前缀（per-class 差异）；
   GPolyMesh.FacetedTopology=loadingMode 1 动态 → 不入静态体
 - G 族每属性 {Type, itemMode, size, loadingMode} 权威表 = TB_Format2023Classes::classes::\<C\>()（R102a）
+- 写侧对偶（R103，TB_Format2026Writers CustomDirectWriter）：GInfo 内联→EP 2×f64 裸写→
+  Point3d/Vector3d 24B 裸写→Radius f64→IsFilled bool **1B**；2026 GInfo 写序
+  {StyleId i64,Tag,CC,Flags} ≠ 2023 读序 {Tag,CC,StyleId,Flags}——**2023 盘上帧与 2026
+  writer 分叉为 GArc 未解的主导假说**（R103；GLine 内联模型 424/309 实证不受影响）
 
 ## 3. 压缩/校验体系
 
@@ -94,7 +98,7 @@ serializeObject → ObjectPtrWriter::write → OdBmObjectPtrWriter::write =
 | NurbSpline 权重 | ✅ WPoint={f64 weight, Point3d}=4×f64 内联（R54） |
 | deposit 写出器文法 | ✅ OutQueue 静态整数+InitWriter+record flush（R102）；record 头/尾插对偶[?] |
 | GInfo 前缀 | ✅ 内联 16B+Flags 家族（R102a）；GLine 帧双样例验证（R102b）；GRep 例外[?] |
-| GArc 轴场字节偏移 | 🟡 GInfo+EP 槽位定案；X/Y/R/C 全相位无有效帧（R102b，M11 剩余） |
+| GArc 轴场字节偏移 | 🟡 2026 写侧帧已定（R103）；2023 盘上分叉待旧版 writer 模块或句柄域检验 |
 | 动态属性段 | ✅ 队列驱动标准对象读（R57）；~~位压缩~~作废 |
 | BFI 修订 | ✅ 接受表 2011→{3}…2023–26→{14}（R53）；rev≠14 布局=外部样例 |
 | 签名 64B | ✅ SDK 无验证路径=跳过（R55）；算法=外部（Revit 侧） |

@@ -142,6 +142,7 @@
 | R102 | **★deposit 写出器树序列化文法 + GInfo 内联前缀模型双破（M11 主线，Ghidra TB_LoaderBase/TB_Format2023Classes 反编译）**：① **写出链全程（R94 之①关闭）**：`serializeObject`→`ObjectPtrWriter::write`(0x289724，OdSmartPtr→OdTfVariant 包装)→**`OdBmObjectPtrWriter::write`(0x2894d8) = `OdBmOutQueue` 构造 + `OdBmObjectPtrInitWriter::write`(静态体：`ClassesContainer::indexOf`→**OdUInt16Writer 写 [i16 类索引]**→writersFactory/GenericObjectWriter 逐属性) + `OdBmOutQueue::writeDynamicProperties`(record 链表逐个 flush)**；② **局部索引 N 模型（R85/R92 的 N 语义终案）**：OutQueue 内 `unordered_map<OdRxObject*,int>`(OdBmStaticIntegerHash) **种子 {null→0, database/ctx→1, root/dummyElement→2}**，referable 对象首见时分配递增 N（=map 元素计数），非 referable→`0xFFFFFFFF`；`StaticIntegerBuilder::createValue`↔`StaticIntegerReader::read`=**i32**+`DynamicQueue::addIdReference`；读侧 `initReferences` 播种工作栈 **[null,db,root]=[0,1,2] 与写侧完全镜像**→**N = deposit 内第 N 个注册对象，payload 地址 = writeDynamicProperties 按 record 链序写出的对象信封位置**（`[i16 class][u32 N]` 6 字节目录条目 = 类索引 u16 + 静态整数 i32，N 递增实证 11,12,13… ✓）；`getLoadingMode` 每属性分派 static/dynamic（0=静态体，1=动态段） | Ghidra 反编译 serializeObject@0x235d34/TB_LoaderBase ObjectPtrWriter@0x289724/0x2894d8/OutQueue@0x28dce6-0x28e442/StaticIntegerReader@0x274936/initReferences@0x275c20 + 目录 N 递增实证 | 观察 | record 链表插入侧(头/尾插)与读侧弹出序的严格对偶未逐步验证；GRep 无 GInfo 前缀的 per-class 差异 |
 | R102a | **★GInfo 内联前缀模型 + G 族运行时属性权威表（M11 之③关闭）**：`version2023::classes::<C>()`(TB_Format2023Classes) 生成 **每属性 {name, Type, FieldType, loadingMode, itemMode, size}** 权威序列化描述符——**GNode={GInfo: obj9 静态}；GCurve={EndParams: f64[2] 固定(item1,size2) 静态}；GLine={Origin f64[3], DirVec f64[3]}；GArc={XVec f64[3], YVec f64[3], Radius f64, Center f64[3], bFilled bool}；GNurbSpline={Degree i32, Closed bool, Rational bool, ControlPoints obj[](265,item5 变长), Knots f64[](item5 变长)}；GPolyMesh={**FacetedTopology obj9 loadingMode=1 动态(不入静态体)**, Flags i32, InteriorGStyleID i32, MaterialID i32}；GRep={BBox f64[3]×2(=48B), TightBBox 48B, gElemType i32, flags i32}**；GInfo 类自身={Tag i32, ControlCommand i32, GStyleElemId i32, Flags u32}=**16B（E1 确认）**——type9+mode0 的对象属性**内联**写值（GInfo 无 referable 属性→不走静态整数），实证 GLine/GArc/GPoint payload[0:16]=(-1/0, 0, -1, 0x80004/0x88004) **Flags=Default/DefaultModel（E1 §3b 完全吻合）**；GRep 为已观测例外（bbox 紧随类标、无 GInfo）→ per-class 差异待解 | TB_Format2023Classes `classes::GNode/GCurve/GLine/GArc/GNurbSpline/GPolyMesh/GRep/GInfo()` 反汇编(setName/setType/setLoadingMode/setItemMode/setSize 序列) + OdBmBlobProperties<GInfo> + 双样例 payload i32quad/flags 实证 | 观察→推断 | GRep 例外的 loadingMode 路径；GArc X/Y/R 在 GInfo+EP 后的精确字节偏移（R102b） |
 | R102b | **GLine 静态帧双样例验证 + R88 计数勘误（M11 之③接入完成）**：**GLine 静态体 = [i16 类标][GInfo 16][EndParams 16][Origin 24][Direction 24]**（GInfo 后 gap16 即 EndParams 槽位）——`ScanInlineGLines/ScanInlineGLinesKeyed` 重构为 GInfo 签名门 + 偏移 32/56 解码：**2023=424 条、2017(v7)=309 条**，样本 (42.854, 9.345, 18.701)→Dir(-1,0,0)、(23.768, -40.470, 37.402)→Dir(1,0,0) = **真实建筑英尺坐标+单位方向（与 m_dirVec 语义吻合）**；**R88 勘误：旧 [EP][O][D] 偏移 0/16/40 实为跨字段错位读取（GInfo 比特被当 EP、邻区字节当 Origin），3,874 条含大量移位噪声——物理门 alone=3,871（含噪） vs GInfo 签名门=424（全真实）**，测试阈值改 ≥400；`ScanNurbSplines/ScanPolyMeshes` 同步接入 GInfo+EP(32B) 前缀与动态属性剔除（PolyMesh 静态体=Flags/StyleID/MaterialID，FacetedTopology 动态→不入体 ✓ R74 占位结论相容）；**GArc 边界（诚实记录）**：GInfo(16)+EP(16) 槽位定案、角度样值(π,π/2,2π)出现于 +32 起，但 X/Y/R/C 在全部字节相位(0..120 逐步)无一满足 正交+正半径+圆心有限+IsFilled∈{0,1} 联合门（单位正交=4/1030≈噪声）→ **GArc 轴场偏移仍未解**，ScanInlineGArcs 保持 schema 对齐+签名门（0 命中不回退），待下轮（疑点：post-EP 区存在常量结构@+64 与 85 相位双数组） | ScanInlineGLines 重构+TestXGLineGInfoLayout+TestInlineCurvesRealSamples(424/424)+TestPolyMeshAndNurbScan + 全字节相位 GArc 网格探针(0..120) | 观察→推断 | **GArc 字节偏移**（M11 唯一剩余解码项）；v7 GLine 更宽 flags 族(0x1088244 等 309 命中已并入) |
+| R103 | **★写侧 per-class CustomDirectWriter 链破解 + 2023/2026 布局分叉假说（M11 续）**：SDK 仅随附 **TB_Format2026Writers.tx**（无 2023 writers 模块）——`CustomDirectWriter<GNode/GCurve/GLine/GArc/GPoint/GInfo>::write` 反编译给出**权威写序**：GNode=getGInfo→**GInfo::write 内联**；GCurve=GNode 基→getEndParams→**2×8B 逐元素裸写（std::function 间接调用，无计数前缀）**；GLine=GCurve 基→getOriginPoint→**OdGePoint3dWriter 裸写 24B**→getDirectionVector→**OdGeVector3dWriter 裸写 24B**；GArc=GCurve 基→XDir(Vector3d 裸写)→YDir→Radius(doubleWriter 裸写 8B)→Center(Point3d 24B)→IsFilled(**boolWriter=1B**，movzbl)；GInfo::write(2026)=StyleElemId(ElementId0Writer)→Tag(i32)→CC(i32)→Flags(u32)，与 2023 读序(Tag,CC,StyleElemId,Flags)不同；ElementId 写=writeElementHandle→**OdInt64Writer=8B**（2026），2023 读=ElementId201120260Reader（u64 handle，-1=null）。**结论**：2026 盘上帧=整数元组 {Tag i32, CC i32, StyleId i64, Flags u32, EP 2×f64, X 24, Y 24, R 8, C 24, F 1}，但**三样例（2023/2022/2017）全字节相位(16..40×R/C/F 位置)物理联合门（缩放正交+正半径+圆心有限+F∈{0,1}∧GInfo 签名）零命中**——与 2026 写侧帧不符 → **新主导假说：2023 盘上布局 ≠ 2026 writer（版本分叉）**。旁证：GLine 前隙 (0,A,B,C) 中 B/C 在相邻线段间互换（2940,2941)→(2941,2940)=共享端点句柄特征，疑 2023 对点/向量属性走静态整数引用+延迟记录而非内联；GLine 内联模型仍以 424/309 真实坐标实证成立（EP 槽=异常位型但 Origin/Dir@32/56 物理可信）。**下一步（唯一高置价值路径）**：取得 2023 版 writer 模块（BimRv 旧版 SDK）或对 2023 reader 走 GenericObjectWriter 对偶路径；或对 (0,A,B,C) 做句柄域统计检验（A=自句柄？B/C=点句柄？） | TB_Format2026Writers.tx GLine/GArc/GCurve/GNode/GInfo::write 反编译 + TB_Common doubleWriter/boolWriter@0x2b650/0x2b54e + TB_LoaderBase writeElementHandle@0x10f14c/ElementId201120260Reader@0xeaf08 + 三样例全相位网格探针 | 观察→推断 | 2023 writer 模块[外部 SDK 版本]；(0,A,B,C) 句柄语义检验 |
 
 | R90 | **GArc 帧破解（富样例）+ 归属边界**：完整帧 = `[i16 GArc][EP 2×f64][XDir 24][YDir 24][Radius 8][Center 24][IsFilled 1]`，**轴为缩放向量**（椭圆式，非单位——单位门 0 命中、正交+有限门 9 命中，样例 EP=(0,0)/C=(0,0) 对称、X/Y 共享分量结构清晰）；`ScanInlineGArcs` 更新为正交+有限门（EP 前缀版）。**归属边界**：9 个命中全在树区间之外（组间引用区）——树 counter 归属需 deposit 边界映射（M11 剩余）；Model.InlineArcs 已接线 | 富样例帧扫描（9 结构化命中） | 观察→推断 | 组间区归属；9 对象的元素映射 |
 
@@ -221,3 +222,36 @@
 - ~~U-R7 ElementHeader 动态属性段 token 位格式~~ ✅ **R57 关闭**：动态段=队列驱动标准对象读（非位压缩）；CondInt16 v≠0 分支长度仍[?]
 - U-R5 协同（workshared）样例
 - U-R6 ~~gzip 链逐成员边界与 65249 分页常数~~ ✅ R25/R26：页成员边界=页记录 ownLen-8；65249=原始页读长上限（含 +8 CRC 记账），非解压尺寸
+
+## M11 续接指引（R102 收口，会话交接）
+
+**边界勘误**：R94 所称"唯一路径需 Ghidra 级反编译"**已于 R102 实际执行并推进大半**——写出器链
+（serializeObject→ObjectPtrWriter→OdBmObjectPtrWriter→OdBmOutQueue/InitWriter）、静态整数
+N 模型、GInfo 内联前缀、G 族运行时属性权威表全部由 Ghidra 反编译定案。nm/objdump 穷尽的
+结论（R94）就此过时为：**Ghidra 路径已打通，剩余为定点反编译**。
+
+**工具态（零成本续接）**：
+- Ghidra 项目 `/tmp/ghidra_proj/RVT_REA` 现含 **3 程序**：TB_Loader.tx、
+  TB_Format2023Readers.tx（已完整分析）、**TB_LoaderBase.tx（本轮导入+分析完成）**。
+- 通用脚本已入库 `analysis/ghidra/`：`SymDecomp.java`（符号子串搜索+批量反编译）、
+  `DumpAsm.java`（地址→指令+入引用）。**运行配方（含坑）**：
+  ```
+  analyzeHeadless /tmp/ghidra_proj RVT_REA -process <Program>.tx -noanalysis \
+    -scriptPath /private/tmp/ghidra_scripts -postScript SymDecomp.java <outDir> <pattern>...
+  ```
+  ⚠️ **/tmp→private/tmp 符号链接**：-scriptPath 必须写 `/private/tmp/...`（否则
+  "Failed to find script in any script directory"）；脚本文件放任一目录即可。
+- 反编译输出（out1–out7，/private/tmp 易失）可由脚本按配方确定性再生；关键结论已抄入
+  R102/R102a/R102b 行内。
+
+**定点入口（剩余开放项 → 具体函数）**：
+| 开放项 | 入口 | 已知锚点 |
+|---|---|---|
+| GArc 轴场字节偏移（M11 唯一解码剩余） | **R103 后主路径**：① 取得 BimRv 旧版 SDK 的 `TB_Format2023Writers.tx`（2023 版 CustomDirectWriter——已证 2026 writer 帧与三样例不符=版本分叉）；② 或对 (0,A,B,C) 前隙做句柄域统计检验（A=自句柄? B/C=共享端点句柄?——B/C 相邻线段互换为强旁证）；③ 或 2023 GenericObjectWriter 对偶属性循环 @TB_LoaderBase 0x189ff6 | 2026 写序已定（R103）：GInfo内联→EP 2×f64→X/Y Vector3d 24B→R f64→C 24B→F bool1B；三样例全相位联合门 0 命中 |
+| GRep 无 GInfo 前缀（per-class 差异） | `version2023::classes::GRep()` 组合基类时对 m_GInfo 的 loadingMode 重设路径；或 `OdBmOutQueue::addAnonymusRecord` 调用方 | GRep static=[bbox48][tight48][gElemType][flags]（R67/R102a） |
+| record 链插入侧（头/尾插）与读侧弹出序对偶 | 写侧 `addAnonymusRecord` @TB_LoaderBase 0x28e194（_M_hook(this+0x40)=哨兵→头插待终验）；读侧 `readProperty/addProperty` @0x274608/`readDynamicProperties` @0x2775e2 | N→payload 映射已闭合（R102），插入方向只差单点验证 |
+| 子节点级归属批量落地 | 上项解出后，按 deposit record 序把 GLine/GArc/… payload 地址映射到 tree counter（R85/R93 框架已备） | `ScanInlineGLinesKeyed`（424/309 已用范围归属）|
+
+**现状快照**：rvt 包 **38 测试全绿**；analysis/**15 篇 md**（九分册+总纲+README 等）与
+`rvt/geom` 契约同步；GArc/Nurb/PolyMesh 扫描器 schema 对齐待偏移；动态插桩
+（observe_native_calls/进程捕获）为 Ghidra 定点反编译不通时的备选路径。
