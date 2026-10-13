@@ -255,3 +255,22 @@ N 模型、GInfo 内联前缀、G 族运行时属性权威表全部由 Ghidra �
 **现状快照**：rvt 包 **38 测试全绿**；analysis/**15 篇 md**（九分册+总纲+README 等）与
 `rvt/geom` 契约同步；GArc/Nurb/PolyMesh 扫描器 schema 对齐待偏移；动态插桩
 （observe_native_calls/进程捕获）为 Ghidra 定点反编译不通时的备选路径。
+
+## 全会话最终状态（R3–R103，终章）
+
+| 阶段 | 交付 | 提交 |
+|---|---|---|
+| M3.5–M8 | 容器/表/分区/记录环/元素层/动态段/扩展尾/包围盒/视图/BRep | M3.5–M8 |
+| M9 | GArc 内容锚定 3,972 + GLine EndParams 3,874 + BFI rev-10 | M9 |
+| M10 | 写出链全程 + deposit 语义闭环 + 绑定精度 97.2% | M10 |
+| M11 | 全年份类索引 + v7 元素层 + GArc 帧 + Schema 反汇编定案 + 组间区归属基础设施 | M11 |
+| **R102/R103（本会话，原"后续解锁"项已交付）** | ① **写出器树序列化文法**（Ghidra TB_LoaderBase：serializeObject→ObjectPtrWriter→OdBmObjectPtrWriter=OutQueue{静态整数种子0/1/2}+InitWriter[u16类索引+静态体]+record flush）；② **局部索引→全局句柄→payload 三联映射**（N=deposit 内第 N 个注册对象，读侧 initReferences 种子镜像）；③ **GInfo 内联前缀模型**（16B {Tag,CC,StyleElemId,Flags}，Flags=Default 0x80004/DefaultModel 0x88004）+ **G 族每属性权威表**（Type/itemMode/size/loadingMode，TB_Format2023Classes）；④ **GLine 帧双样例实证**（[GInfo16][EP16][Origin24][Dir24]，2023=424/2017=309 真实坐标；R88 之3,874 勘误为错位读取）；⑤ **2026 写侧 CustomDirectWriter 链**（R103：GInfo 内联→EP 2×f64 裸写→Point3d/Vector3d 24B→Radius f64→IsFilled bool1B）；⑥ Nurb/PolyMesh 扫描器接入 GInfo 前缀 + PolyMesh.FacetedTopology=动态确认 | R102/R102a/R102b/R103 |
+
+**HEAD 追平（0fa28c8，并行会话）**：GArc 帧**已验证并接线**——schema 偏移（GInfo16+EP16+X@32+Y@56+R@80+C@88+F@112）配**单位正交轴门**扫出 2023=10 弧 / 2017=1 弧（样本 X=(0,0,-1),Y=(1,0,0),R=0.496,C=(0,0,5.2)）——R103 的"版本分叉"假说**作废**：帧位置一直正确，此前全相位联合门 0 命中系本会话 GInfo Flags 签名集过窄把真弧滤除。M11 解码目标**全部达成**。
+
+**剩余开放项（机制均已锚定，见 M11 续接指引表）**：
+1. 子节点级归属**批量落地**（N→payload 机制已闭合 R102；按 deposit record 序批量映射待实现）
+2. GRep 无 GInfo 前缀的 per-class 差异；record 链头插与读侧弹出序对偶单点验证
+3. NurbSpline/PolyMesh 真实几何 = 富样例 RVT（外部依赖；扫描器已就绪）
+
+已修正原收尾稿两处：Ghidra 写出器链/GInfo 前缀/映射机制**非后续项，为 R102 已交付**；GInfo 为**内联 16B 定长**（非"变长前缀"，变长假说随 R102a 作废）。geom 契约与全部已验证交付不变（38 测试全绿，analysis/ 15 篇 + analysis/ghidra/ 脚本），富样例到位后零成本续接。
