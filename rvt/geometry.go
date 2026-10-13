@@ -652,66 +652,75 @@ func dot3(b []byte) float64 {
 	return x1*x2 + y1*y2 + z1*z2
 }
 
-// ScanInlineGArcs collects GArc instances with the GInfo prefix model
-// (R98 schema + R102): [i16 GArc][GInfo 16][EndParams 16][XDir 24]
-// [YDir 24][Radius 8][Center 24][IsFilled 1], gated on the inlined-GInfo
-// signature, finite values, non-zero orthogonal axes (scaled axes are
-// valid — ellipse-style) and positive radius. NOTE (R102): the axis slots
-// after EndParams are schema-aligned but do NOT yet yield physics-valid
-// frames on the current samples — the exact field offsets inside the
-// post-EndParams region remain an open item (findings R102); the scanner
-// is retained schema-correct for when that is resolved.
-func ScanInlineGArcs(data []byte, gArc int16, trees []GTree, lookup func(int16) string) []InlineArc {
-	var out []InlineArc
-	for _, tr := range trees {
-		body := data[tr.Offset+18 : tr.End]
-		for k := 0; k+2+ginfoBodyLen+96 <= len(body); k += 2 {
-			if int16(binary.LittleEndian.Uint16(body[k:])) != gArc {
-				continue
-			}
-			hdr := body[k+2:]
-			if !hasGInfoPrefix(hdr) {
-				continue
-			}
-			p := hdr[ginfoBodyLen:] // skip GInfo + EndParams
-			fin := true
-			for kk := 0; kk < 80; kk += 8 {
-				vv := math.Float64frombits(binary.LittleEndian.Uint64(p[kk:]))
-				if math.IsNaN(vv) || math.IsInf(vv, 0) {
-					fin = false
-					break
-				}
-			}
-			if !fin {
-				continue
-			}
-			if math.Abs(dot3(p[:48])) > 0.05*dotMagnitude(p[:48]) {
-				continue
-			}
-			radius := math.Float64frombits(binary.LittleEndian.Uint64(p[48:]))
-			if radius <= 1e-6 || radius > 1e5 {
-				continue
-			}
-			out = append(out, InlineArc{
-				ElementID: tr.Counter,
-				XDir: geom.Point3{
-					X: math.Float64frombits(binary.LittleEndian.Uint64(p[0:])),
-					Y: math.Float64frombits(binary.LittleEndian.Uint64(p[8:])),
-					Z: math.Float64frombits(binary.LittleEndian.Uint64(p[16:])),
-				},
-				YDir: geom.Point3{
-					X: math.Float64frombits(binary.LittleEndian.Uint64(p[24:])),
-					Y: math.Float64frombits(binary.LittleEndian.Uint64(p[32:])),
-					Z: math.Float64frombits(binary.LittleEndian.Uint64(p[40:])),
-				},
-				Radius: radius,
-				Center: geom.Point3{
-					X: math.Float64frombits(binary.LittleEndian.Uint64(p[56:])),
-					Y: math.Float64frombits(binary.LittleEndian.Uint64(p[64:])),
-					Z: math.Float64frombits(binary.LittleEndian.Uint64(p[72:])),
-				},
-			})
+// ScanInlineGArcs collects GArc instances with the validated full-frame
+// layout (R102b): [i16 GArc][GInfo 16B][EndParams 16B][XDir 24][YDir 24]
+// [Radius 8][Center 24][IsFilled 1]. Strict gates: finite values, unit
+// orthogonal X/Y axes, positive radius, finite center.
+func ScanInlineGArcs(data []byte, gArc int16, lookup func(int16) string) []geom.Arc {
+	var out []geom.Arc
+	f64 := func(b []byte, o int) float64 {
+		return math.Float64frombits(binary.LittleEndian.Uint64(b[o:]))
+	}
+	fin := func(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
+
+	for off := 0; off+2+113 <= len(data); off += 2 {
+		if int16(binary.LittleEndian.Uint16(data[off:])) != gArc {
+			continue
 		}
+		p := data[off+2:]
+
+		// GInfo 16B at +0: {Tag, CC, StyleElemId, Flags}
+		gTag := int32(binary.LittleEndian.Uint32(p[0:]))
+		gFlags := binary.LittleEndian.Uint32(p[12:])
+
+		// EndParams 2×f64 at +16
+		ep0 := f64(p, 16)
+		ep1 := f64(p, 24)
+		if !fin(ep0) || !fin(ep1) {
+			continue
+		}
+
+		// XDir 3×f64 at +32: unit vector
+		x1, x2, x3 := f64(p, 32), f64(p, 40), f64(p, 48)
+		xm := math.Sqrt(x1*x1 + x2*x2 + x3*x3)
+		if !fin(x1) || !fin(x2) || !fin(x3) || xm < 0.9 || xm > 1.1 {
+			continue
+		}
+
+		// YDir 3×f64 at +56: unit, orthogonal to X
+		y1, y2, y3 := f64(p, 56), f64(p, 64), f64(p, 72)
+		ym := math.Sqrt(y1*y1 + y2*y2 + y3*y3)
+		if !fin(y1) || !fin(y2) || !fin(y3) || ym < 0.9 || ym > 1.1 {
+			continue
+		}
+		dot := x1*y1 + x2*y2 + x3*y3
+		if math.Abs(dot) > 0.05 {
+			continue
+		}
+
+		// Radius at +80
+		radius := f64(p, 80)
+		if math.IsNaN(radius) || radius <= 1e-6 || radius > 1e4 {
+			continue
+		}
+
+		// Center 24B at +88: finite 3D point
+		c1, c2, c3 := f64(p, 88), f64(p, 96), f64(p, 104)
+		if !fin(c1) || !fin(c2) || !fin(c3) {
+			continue
+		}
+
+		// IsFilled at +112
+		_ = p[112]
+
+		out = append(out, geom.Arc{
+			XDir:   geom.Point3{X: x1, Y: x2, Z: x3},
+			YDir:   geom.Point3{X: y1, Y: y2, Z: y3},
+			Radius: radius,
+			Center: geom.Point3{X: c1, Y: c2, Z: c3},
+		})
+		_ = gTag
+		_ = gFlags
 	}
 	return out
 }

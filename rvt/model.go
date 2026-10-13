@@ -23,7 +23,7 @@ type Model struct {
 	// element-counter keyed block contexts (R72/R77).
 	BoundCurves []geom.BoundLine
 	BoundArcs   []geom.BoundArc
-	InlineArcs  []InlineArc
+	InlineArcs  []geom.Arc
 	// InlineCurves: validated GLine instances from the class-103 trees
 	// (R88 EndParams-prefix model: [EndParams 2×f64][Origin 3×f64]
 	// [Direction 3×f64]; 3,874 non-degenerate segments on 2023).
@@ -70,7 +70,7 @@ func (p *Partition) Model(version string) *Model {
 		if geo != nil {
 			gArc, ok2 := classindex.Index(version, "OdBmGArc")
 			if ok2 {
-				m.InlineArcs = ScanInlineGArcs(geo.Data, int16(gArc), m.Trees, lookup)
+				m.InlineArcs = ScanInlineGArcs(geo.Data, int16(gArc), lookup)
 			}
 		}
 		if store != nil {
