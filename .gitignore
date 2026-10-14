@@ -1,3 +1,5 @@
 .DS_Store
 *.rvt
 /bin/
+ref/
+__pycache__/

@@ -382,6 +382,9 @@ func ScanGArcs(data []byte) []geom.Arc {
 		if f[6] <= 1e-6 || f[6] > 1e4 {
 			continue
 		}
+		if math.Hypot(math.Hypot(f[7], f[8]), f[9]) > 1e6 {
+			continue
+		}
 		out = append(out, geom.Arc{
 			XDir:   geom.Point3{X: f[0], Y: f[1], Z: f[2]},
 			YDir:   geom.Point3{X: f[3], Y: f[4], Z: f[5]},
@@ -496,6 +499,9 @@ func ScanGArcsKeyed(data []byte, keys []KeyedBinding) []geom.BoundArc {
 			continue
 		}
 		if f[6] <= 1e-6 || f[6] > 1e4 {
+			continue
+		}
+		if math.Hypot(math.Hypot(f[7], f[8]), f[9]) > 1e6 {
 			continue
 		}
 		elID, hasEl := bindElementID(keys, off)
@@ -626,13 +632,16 @@ type InlineObj struct {
 }
 
 // InlineArc is one decoded GArc instance (reader order: XDirection,
-// YDirection, Radius, Center, IsFilled — R54/R86 method).
+// YDirection, Radius, Center, IsFilled — R54/R86 method). StartAngle/
+// EndAngle carry the GCurve EndParams when they decode (0,0 = unknown).
 type InlineArc struct {
-	ElementID uint32      `json:"element_id"`
-	XDir      geom.Point3 `json:"xdir"`
-	YDir      geom.Point3 `json:"ydir"`
-	Radius    float64     `json:"radius"`
-	Center    geom.Point3 `json:"center"`
+	ElementID  uint32      `json:"element_id"`
+	XDir       geom.Point3 `json:"xdir"`
+	YDir       geom.Point3 `json:"ydir"`
+	Radius     float64     `json:"radius"`
+	Center     geom.Point3 `json:"center"`
+	StartAngle float64     `json:"start_angle,omitempty"`
+	EndAngle   float64     `json:"end_angle,omitempty"`
 }
 
 // isUnitish: |v| within [0.99, 1.01].
@@ -714,10 +723,12 @@ func ScanInlineGArcs(data []byte, gArc int16, lookup func(int16) string) []geom.
 		_ = p[112]
 
 		out = append(out, geom.Arc{
-			XDir:   geom.Point3{X: x1, Y: x2, Z: x3},
-			YDir:   geom.Point3{X: y1, Y: y2, Z: y3},
-			Radius: radius,
-			Center: geom.Point3{X: c1, Y: c2, Z: c3},
+			XDir:       geom.Point3{X: x1, Y: x2, Z: x3},
+			YDir:       geom.Point3{X: y1, Y: y2, Z: y3},
+			Radius:     radius,
+			Center:     geom.Point3{X: c1, Y: c2, Z: c3},
+			StartAngle: ep0,
+			EndAngle:   ep1,
 		})
 		_ = gTag
 		_ = gFlags
@@ -806,7 +817,13 @@ func ScanInlineGArcsAttributed(data []byte, trees []GTree, gArc int16, lookup fu
 		}
 		base := off + 2
 		ep0, ep1 := f64at2(data, base), f64at2(data, base+8)
-		if !fin2(ep0) || !fin2(ep1) || math.Abs(ep0) > 1e4 || math.Abs(ep1) > 1e4 {
+		// EP denormal kill: a real curve parameter is exactly 0 or a true
+		// radian measure; denormal-scale values (1e-14…1e-308) mark frame
+		// misalignment (observed: XDir reading the Center shifted one slot).
+		if !fin2(ep0) || !fin2(ep1) || math.Abs(ep0) > 100 || math.Abs(ep1) > 100 {
+			continue
+		}
+		if (ep0 != 0 && math.Abs(ep0) < 1e-6) || (ep1 != 0 && math.Abs(ep1) < 1e-6) {
 			continue
 		}
 		x1, x2, x3 := f64at2(data, base+16), f64at2(data, base+24), f64at2(data, base+32)
@@ -816,19 +833,28 @@ func ScanInlineGArcsAttributed(data []byte, trees []GTree, gArc int16, lookup fu
 		if math.Abs(x1) < 1e-9 && math.Abs(x2) < 1e-9 && math.Abs(x3) < 1e-9 {
 			continue
 		}
+		if math.Hypot(math.Hypot(x1, x2), x3) > 1e3 {
+			continue
+		}
 		y1, y2, y3 := f64at2(data, base+40), f64at2(data, base+48), f64at2(data, base+56)
 		if !fin2(y1) || !fin2(y2) || !fin2(y3) {
+			continue
+		}
+		if math.Hypot(math.Hypot(y1, y2), y3) > 1e3 {
 			continue
 		}
 		if math.Abs(x1*y1+x2*y2+x3*y3) > 0.05*vecMag6(data[base:base+48]) {
 			continue
 		}
 		r := f64at2(data, base+64)
-		if !fin2(r) || r <= 1e-6 || r > 1e5 {
+		if !fin2(r) || r <= 1e-6 || r > 1e4 {
 			continue
 		}
 		c1, c2, c3 := f64at2(data, base+72), f64at2(data, base+80), f64at2(data, base+88)
 		if !fin2(c1) || !fin2(c2) || !fin2(c3) {
+			continue
+		}
+		if math.Hypot(math.Hypot(c1, c2), c3) > 1e6 {
 			continue
 		}
 		// nearest preceding tree counter
@@ -837,11 +863,13 @@ func ScanInlineGArcsAttributed(data []byte, trees []GTree, gArc int16, lookup fu
 			continue
 		}
 		out = append(out, InlineArc{
-			ElementID: ctrs[i],
-			XDir:      geom.Point3{X: x1, Y: x2, Z: x3},
-			YDir:      geom.Point3{X: y1, Y: y2, Z: y3},
-			Radius:    r,
-			Center:    geom.Point3{X: c1, Y: c2, Z: c3},
+			ElementID:  ctrs[i],
+			XDir:       geom.Point3{X: x1, Y: x2, Z: x3},
+			YDir:       geom.Point3{X: y1, Y: y2, Z: y3},
+			Radius:     r,
+			Center:     geom.Point3{X: c1, Y: c2, Z: c3},
+			StartAngle: ep0,
+			EndAngle:   ep1,
 		})
 	}
 	return out

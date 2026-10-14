@@ -51,6 +51,30 @@ for _, c := range model.BoundCurves {
 for _, a := range model.InlineArcs {
     fmt.Println(a.ElementID, a.Radius, a.Center)
 }
+
+// 内嵌 schema（Formats/Latest，类名→序列化 tag）
+schema, _ := rvt.OpenSchema("model.rvt")
+fmt.Println(schema.ByName("ElementHeader").Tag)
+
+// 2023 元素记录（BuiltInCategory/放置类型/宿主引用/包围盒）
+rep, _ := rvt.RecordsFromStream(data)
+for _, rec := range rep.Records {
+    fmt.Println(rec.ElementID, rec.Category, rec.IsPlacedInstance(), rec.BBox)
+}
+
+// 草图平面轮廓（楼板/屋顶/天花的真实边界，约束闭合求解）
+for id, profile := range rep.Profiles {
+    fmt.Println(id, len(profile.OuterXY), "vertices")
+}
+
+// 墙位置线（有界线/弧）与类型层厚
+walls := rvt.ScanFirstBoundedLines(partition, rep.Schema, wallIDs, 2023)
+layers := rvt.ScanCompoundLayerLists(partition, declared, 2023)
+
+// 类型层厚→实例关联 + 类型名（构件树维度）
+thk := rvt.TypeLayerThickness(partition, rep.Schema, declared, 2023)
+join := rvt.TypeJoinByReference(rep.Records, thk)   // 实例→类型，零歧义
+names := rvt.ScanElementDataNames(partition, rep.Schema, typeIDs, 2023)
 ```
 
 ## 支持的 Revit 版本
@@ -80,6 +104,40 @@ internal/zg/    gzip 成员解压（精确边界；footer 宽容校验）
 cmd/rvtinfo/    CLI：rvtinfo <file.rvt> → JSON
 ```
 
+## 与参考实现的交叉验证
+
+`ref/rvt-rs-main`（净室 Rust 实现，Apache-2.0）作为对拍基准（2026-10）：
+
+- **容器层逐字节一致**：页剥离（65,249B 页 = 64,896B 载荷 + 353B 校验尾）后，
+  三个回归样例的膨胀分区与 rvt-rs 完全相同（2023/2022/2017，
+  94.4/75.8/75.7 MB）——该修复把此前的"损坏页"全部转为干净验证页。
+- **Formats/Latest schema**：精确文法解析 4,418 类（2023），关键 tag 与
+  rvt-rs 逐一相同（Outline=316 / ElementParents=1410 / ElementHeader=1398）。
+- **2023 元素记录**：1,197 条 / 876 放置实例，含 BuiltInCategory、放置类型、
+  宿主/所有者引用与包围盒；与 rvt-rs 逐条一致（bbox 1,197/1,197，1e-9）。
+  其他版本 fail-closed（2024–2026 布局已就位并以合成帧测试锁定；
+  **2022 布局已解码**——ElementHeader 帧 + bbox@52 + 引用列表@100，
+  6,513 条记录接入桥接）。
+- **参数化几何首批**（Go 侧超越基准 2023 能力）：草图平面轮廓 9 个闭合
+  （楼板/屋顶真实边界，约束求解不闭合即拒绝）、56/56 墙位置线、类型层厚
+  27 列表（0.39–1.51 ft）。
+- **类型维度**：层厚→实例引用关联 62/62 零歧义（47 墙+8 楼板+7 天花/屋顶），
+  类型名 27/27 全解析（"Interior - 165 Partition (1-hr)" 等）——构件树与
+  精确墙体厚度就位。
+- **家族维度**：FamilySymbol 关联 434/876 实例（门 16/16、窗 17/17，数据侧
+  [ff×4][id] 消歧），类型名全解（门 "800 x 2100"/"Entrance door"、
+  窗 "Standard"——名字深度可达 3 KB+，全窗口搜索）。
+- **类型尺寸投票**：同符号实例数据 f64 投票解锁类型宽高（窗 1500×2700mm
+  等 15 符号），17/17 窗 + 16/16 门建成定向叶片盒并开洞（trusted 几何门
+  + 启发式几何一致性门）；参数显示名不在 .rvt 内（内置参数名=SDK 枚举
+  2,284 条，BuiltinParamByID/SearchBuiltinParams）。
+- **内置参数表**：SDK BmBuiltInParameter.h 的 2,284 条定义生成
+  id→名/类型/单位 Go 映射（`BuiltinParamByID`/`SearchBuiltinParams`）。
+- **实例摆位**：372/373 FamilyInstance 解出变换矩阵（3×3 旋转正交门
+  + 原点），92.7% origin 落在记录 bbox 内。
+- **实体覆盖**：桥接 shaped=2,585/12,194（65 真实实体 + 2,520 bbox 代理盒），
+  15 处门窗开洞从宿主墙实体布尔扣除。
+
 ## 架构
 
 ```
@@ -88,8 +146,10 @@ cmd/rvtinfo/    CLI：rvtinfo <file.rvt> → JSON
  ├ TransmissionData     u32 + UTF-16 XML（外部引用）
  ├ Global/ElemTable     6B 头 + 28B×N [id,id,0,depA,depB,0,-1]
  ├ Global/PartitionTable 工作集名
- ├ Partitions/<n>       12B 头 + 记录环 [counter][size][body][echo] × N
- │   ├ class-101 子流   ElementHeader 静态 schema
+ ├ Formats/Latest       内嵌 schema：类定义文法（tag=定义序数，首类=12）
+ ├ Partitions/<n>       校验页（65,249B=64,896B+353B 尾，解码前剥离）
+ │                      12B 头 + 记录环 [counter][size][body][echo] × N
+ │   ├ class-101 子流   ElementHeader 静态 schema + 2023 元素记录帧
  │   ├ class-102 子流   G 节点对象存储
  │   └ class-103 子流   GeomStep 目录 + G 树 + 内联几何
  ├ Contents             魔数帧 [62 19 22 05]

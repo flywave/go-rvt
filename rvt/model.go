@@ -28,6 +28,11 @@ type Model struct {
 	// (R88 EndParams-prefix model: [EndParams 2×f64][Origin 3×f64]
 	// [Direction 3×f64]; 3,874 non-degenerate segments on 2023).
 	InlineCurves []geom.Line
+	// Tree-attributed inline geometry (exact per-element binding by G-tree
+	// range — R91): inline GLines and GArcs bound to their enclosing tree's
+	// element counter.
+	BoundInlineCurves []geom.BoundLine
+	InlineArcsBound   []geom.BoundArc
 }
 
 // geometrySubStreamClass is the class-103 page tag (both samples).
@@ -57,42 +62,14 @@ func (p *Partition) Model(version string) *Model {
 		}
 	}
 	if geo != nil {
-		m.collectBReps(geo.Data, lookup)
-		if gl, ok := classindex.Index(version, "OdBmGLine"); ok {
-			m.InlineCurves = ScanInlineGLines(geo.Data, int16(gl))
-		}
 		var store *SubStream
 		for _, ss := range p.SubStreams {
 			if ss.Class == geometryStoreClass {
 				store = ss
 			}
 		}
-		if geo != nil {
-			gArc, ok2 := classindex.Index(version, "OdBmGArc")
-			if ok2 {
-				m.InlineArcs = ScanInlineGArcs(geo.Data, int16(gArc), lookup)
-			}
-		}
-		if store != nil {
-			// element-counter key positions for attribution (R77)
-			keySet := map[uint32]bool{}
-			for _, ss := range p.SubStreams {
-				if len(ss.Deposits) > 0 {
-					for i := range ss.Records {
-						keySet[ss.Records[i].Counter] = true
-					}
-				}
-			}
-			keys := KeyPositions(store.Data, keySet)
-			if gl, ok := classindex.Index(version, "OdBmGLine"); ok {
-				m.Curves = ScanGLines(store.Data, int16(gl))
-				m.BoundCurves = ScanGLinesKeyed(store.Data, int16(gl), keys)
-			}
-			m.Arcs = ScanGArcs(store.Data)
-			m.BoundArcs = ScanGArcsKeyed(store.Data, keys)
-		}
-		gEl, ok := classindex.Index(version, "OdBmGElement")
-		if ok {
+		gEl, hasGEl := classindex.Index(version, "OdBmGElement")
+		if hasGEl {
 			m.Trees = ScanGTrees(geo.Data, func() int {
 				gi := ParseGeometryIndex(geo.Data)
 				return gi.DataOffset
@@ -111,6 +88,48 @@ func (p *Partition) Model(version string) *Model {
 					e.BBox = &bb
 				}
 			}
+			// tree-range attribution of inline geometry (R91)
+			if gl, ok := classindex.Index(version, "OdBmGLine"); ok {
+				m.BoundInlineCurves = ScanInlineGLinesKeyed(geo.Data, int16(gl), m.Trees)
+			}
+			if gArc, ok := classindex.Index(version, "OdBmGArc"); ok {
+				m.InlineArcs = ScanInlineGArcs(geo.Data, int16(gArc), lookup)
+				for _, ia := range ScanInlineGArcsAttributed(geo.Data, m.Trees, int16(gArc), lookup) {
+					m.InlineArcsBound = append(m.InlineArcsBound, geom.BoundArc{
+						ElementID: ia.ElementID,
+						Arc: geom.Arc{
+							XDir:       ia.XDir,
+							YDir:       ia.YDir,
+							Radius:     ia.Radius,
+							Center:     ia.Center,
+							StartAngle: ia.StartAngle,
+							EndAngle:   ia.EndAngle,
+						},
+					})
+				}
+			}
+			if gl, ok := classindex.Index(version, "OdBmGLine"); ok {
+				m.InlineCurves = ScanInlineGLines(geo.Data, int16(gl))
+			}
+		}
+		m.collectBReps(geo.Data, lookup, m.Trees)
+		if store != nil {
+			// element-counter key positions for attribution (R77)
+			keySet := map[uint32]bool{}
+			for _, ss := range p.SubStreams {
+				if len(ss.Deposits) > 0 {
+					for i := range ss.Records {
+						keySet[ss.Records[i].Counter] = true
+					}
+				}
+			}
+			keys := KeyPositions(store.Data, keySet)
+			if gl, ok := classindex.Index(version, "OdBmGLine"); ok {
+				m.Curves = ScanGLines(store.Data, int16(gl))
+				m.BoundCurves = ScanGLinesKeyed(store.Data, int16(gl), keys)
+			}
+			m.Arcs = ScanGArcs(store.Data)
+			m.BoundArcs = ScanGArcsKeyed(store.Data, keys)
 		}
 	}
 	sort.Slice(m.Elements, func(i, j int) bool { return m.Elements[i].ID < m.Elements[j].ID })
@@ -175,10 +194,28 @@ func (m *Model) collectViews(ss *SubStream, lookup func(int16) string, version s
 
 // collectBReps groups Face/Edge catalog runs of the class-103 G region into
 // topology skeletons (findings R56): consecutive OdBmFace/OdBmEdge runs
-// within a small window belong to one BRep blob's topology.
-func (m *Model) collectBReps(data []byte, lookup func(int16) string) {
+// within a small window belong to one BRep blob's topology. When a group's
+// first run falls inside a G tree's body range the skeleton is attributed
+// to that tree's element counter (0 = unattributed).
+func (m *Model) collectBReps(data []byte, lookup func(int16) string, trees []GTree) {
 	gi := ParseGeometryIndex(data)
 	runs := ScanGCatalogRuns(data, gi.DataOffset, lookup)
+	// tree body ranges for attribution (sorted by Offset)
+	type treeRange struct{ lo, hi int; id uint32 }
+	ranges := make([]treeRange, 0, len(trees))
+	for _, tr := range trees {
+		if tr.End > tr.Offset {
+			ranges = append(ranges, treeRange{tr.Offset, tr.End, tr.Counter})
+		}
+	}
+	sort.Slice(ranges, func(i, j int) bool { return ranges[i].lo < ranges[j].lo })
+	treeFor := func(off int) uint32 {
+		i := sort.Search(len(ranges), func(i int) bool { return ranges[i].lo > off }) - 1
+		if i >= 0 && off < ranges[i].hi {
+			return ranges[i].id
+		}
+		return 0
+	}
 	const brepGap = 1024 // max bytes between runs of one BRep group
 	var cur *geom.BRep
 	flush := func() {
@@ -200,7 +237,7 @@ func (m *Model) collectBReps(data []byte, lookup func(int16) string) {
 			flush()
 		}
 		if cur == nil {
-			cur = &geom.BRep{}
+			cur = &geom.BRep{ElementID: treeFor(r.Offset)}
 		}
 		if isFace {
 			cur.FaceIDs = append(cur.FaceIDs, idRange(r)...)
@@ -216,6 +253,69 @@ func idRange(r GCatalogRun) []uint32 {
 	out := make([]uint32, 0, r.Entries)
 	for id := int64(r.FirstID); id <= int64(r.LastID) && len(out) < r.Entries; id++ {
 		out = append(out, uint32(id))
+	}
+	return out
+}
+
+// GeometryManifest assembles the per-element decoded geometry — the unit
+// the go-topo bridge consumes. An entry exists for every element with
+// geometry evidence: a GElement tree (HasTree), tree- or store-attributed
+// curves/arcs, or an attributed BRep skeleton. Elements without any
+// evidence are absent (metadata-only: datums, parameters, tables, …).
+// Tree counters that do not identify a known element are dropped.
+func (m *Model) GeometryManifest() map[uint32]*geom.ElementGeometry {
+	known := make(map[uint32]bool, len(m.Elements))
+	for i := range m.Elements {
+		known[m.Elements[i].ID] = true
+	}
+	out := map[uint32]*geom.ElementGeometry{}
+	get := func(id uint32) *geom.ElementGeometry {
+		if !known[id] {
+			return nil
+		}
+		g := out[id]
+		if g == nil {
+			g = &geom.ElementGeometry{ElementID: id}
+			out[id] = g
+		}
+		return g
+	}
+	for _, tr := range m.Trees {
+		if g := get(tr.Counter); g != nil {
+			g.HasTree = true
+			if g.BBox == nil && len(tr.BBoxes) > 0 {
+				bb := tr.BBoxes[0]
+				g.BBox = &bb
+			}
+		}
+	}
+	for _, bl := range m.BoundInlineCurves {
+		if g := get(bl.ElementID); g != nil {
+			g.Lines = append(g.Lines, bl.Line)
+		}
+	}
+	for _, ba := range m.InlineArcsBound {
+		if g := get(ba.ElementID); g != nil {
+			g.Arcs = append(g.Arcs, ba.Arc)
+		}
+	}
+	for _, bl := range m.BoundCurves {
+		if g := get(bl.ElementID); g != nil {
+			g.Lines = append(g.Lines, bl.Line)
+		}
+	}
+	for _, ba := range m.BoundArcs {
+		if g := get(ba.ElementID); g != nil {
+			g.Arcs = append(g.Arcs, ba.Arc)
+		}
+	}
+	for i := range m.BReps {
+		if b := &m.BReps[i]; b.ElementID != 0 {
+			if g := get(b.ElementID); g != nil && g.BRep == nil {
+				cp := *b
+				g.BRep = &cp
+			}
+		}
 	}
 	return out
 }

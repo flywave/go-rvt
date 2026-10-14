@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"sort"
+	"strings"
 	"unicode/utf16"
 
 	"github.com/flywave/go-rvt/internal/zg"
@@ -59,6 +60,63 @@ var gzipMagic = []byte{0x1f, 0x8b, 0x08}
 // staleIndexDelta is the per-rewrite length deficit of stale-index pages
 // (findings R29/R40: -353 per rewrite, -706 = two rewrites).
 const staleIndexDelta = 353
+
+// Checksum-page framing of the stored streams (cross-validated
+// byte-for-byte against the rvt-rs reference implementation on
+// rac_basic_2023, October 2026): every complete 65,249-byte page of the
+// stored stream carries a 353-byte checksum/ECC trailer after its
+// 64,896 payload bytes (ODA PagedStreamImplReader<65249>). Without the
+// strip, members that read past a page boundary inflate "corrupt" data
+// and trailing payload is lost; with it, every page verifies cleanly.
+const (
+	storedPageBytes   = 65249
+	storedPagePayload = 64896
+)
+
+// isChecksumPagedStream reports whether a stored stream uses the
+// checksum-page framing: the numbered partitions (full path "Partitions/13"
+// or the bare partition name "13") and the named table streams. Matches
+// the reference gate (rvt-rs compression.rs is_checksum_paged_stream).
+func isChecksumPagedStream(name string) bool {
+	rest := name
+	if after, ok := strings.CutPrefix(name, "Partitions/"); ok {
+		rest = after
+	}
+	if rest != "" && !strings.Contains(rest, "/") {
+		numeric := rest != ""
+		for _, c := range rest {
+			if c < '0' || c > '9' {
+				numeric = false
+				break
+			}
+		}
+		if numeric {
+			return true
+		}
+	}
+	switch name {
+	case "Formats/Latest",
+		"Global/ContentDocuments", "Global/DocumentIncrementTable",
+		"Global/ElemTable", "Global/History", "Global/Latest",
+		"Global/PartitionTable":
+		return true
+	}
+	return false
+}
+
+// stripPageChecksums removes each complete page's 353-byte trailer.
+// The final short page is kept in full.
+func stripPageChecksums(data []byte) []byte {
+	full := len(data) / storedPageBytes
+	if full == 0 {
+		return data
+	}
+	out := make([]byte, 0, len(data))
+	for p := 0; p < full; p++ {
+		out = append(out, data[p*storedPageBytes:p*storedPageBytes+storedPagePayload]...)
+	}
+	return append(out, data[full*storedPageBytes:]...)
+}
 
 // PageRecord is the 32-byte index record preceding one page.
 type PageRecord struct {
@@ -212,6 +270,9 @@ func ReadPartition(name string, stream []byte) (*Partition, error) {
 // (rvt/classindex) used to resolve record class names during the
 // sub-stream record walk.
 func ReadPartitionWithLookup(name string, stream []byte, lookup func(int16) string) (*Partition, error) {
+	if isChecksumPagedStream(name) {
+		stream = stripPageChecksums(stream)
+	}
 	if len(stream) < partitionFixedHeader+partitionRecordSize {
 		return nil, fmt.Errorf("rvt: partition %s: short stream (%d bytes)", name, len(stream))
 	}

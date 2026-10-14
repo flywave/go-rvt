@@ -189,15 +189,16 @@ func Open(data []byte) (*Metadata, error) {
 			}
 		}
 		md.Model = &ModelSummary{
-			Elements:    len(m.Elements),
-			Views:       len(m.Views),
-			BReps:       len(m.BReps),
-			GTrees:      len(m.Trees),
-			WithBBox:    withBBox,
-			Curves:      len(m.Curves),
-			Arcs:        len(m.Arcs),
-			BoundCurves: len(m.BoundCurves),
-			BoundArcs:   len(m.BoundArcs),
+			Elements:         len(m.Elements),
+			Views:            len(m.Views),
+			BReps:            len(m.BReps),
+			GTrees:           len(m.Trees),
+			WithBBox:         withBBox,
+			Curves:           len(m.Curves),
+			Arcs:             len(m.Arcs),
+			BoundCurves:      len(m.BoundCurves),
+			BoundArcs:        len(m.BoundArcs),
+			GeometryElements: len(m.GeometryManifest()),
 		}
 	}
 	sort.Slice(md.Partitions, func(i, j int) bool { return md.Partitions[i].Name < md.Partitions[j].Name })
@@ -266,4 +267,8 @@ type ModelSummary struct {
 	Arcs        int `json:"arcs,omitempty"`
 	BoundCurves int `json:"bound_curves,omitempty"`
 	BoundArcs   int `json:"bound_arcs,omitempty"`
+	// GeometryElements is the geometry manifest size: elements with any
+	// geometry evidence (G tree, attributed curves/arcs, attributed BRep
+	// skeleton) — the object set the go-topo bridge emits.
+	GeometryElements int `json:"geometry_elements,omitempty"`
 }

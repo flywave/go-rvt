@@ -55,9 +55,31 @@ type View struct {
 // BRep is a boundary-representation topology skeleton: the Face/Edge id
 // sequences cataloged in the class-103 G region (findings R56). IDs index
 // the G-node id space; geometry payloads await the blob campaign (R65).
+//
+// ElementID is the owning element when the skeleton's catalog runs fall in
+// or near that element's G tree (0 = unattributed).
 type BRep struct {
-	FaceIDs []uint32
-	EdgeIDs []uint32
+	FaceIDs   []uint32
+	EdgeIDs   []uint32
+	ElementID uint32 `json:"element_id,omitempty"`
+}
+
+// ElementGeometry is the decoded geometry bound to one element — the unit
+// of the go-topo bridge manifest. Every geometry-bearing element yields
+// exactly one entry (bbox from its G tree, exact curve/arc geometry from
+// the inline and store scans, topology skeleton when cataloged).
+type ElementGeometry struct {
+	ElementID uint32   `json:"element_id"`
+	BBox      *BBox    `json:"bbox,omitempty"`
+	Lines     []Line   `json:"lines,omitempty"`
+	Arcs      []Arc    `json:"arcs,omitempty"`
+	BRep      *BRep    `json:"brep,omitempty"`
+	HasTree   bool     `json:"has_tree,omitempty"` // GElement tree present
+}
+
+// HasGeometry reports whether any geometry payload decoded for the element.
+func (g *ElementGeometry) HasGeometry() bool {
+	return g.BBox != nil || len(g.Lines) > 0 || len(g.Arcs) > 0 || g.BRep != nil
 }
 
 // WPoint is a NURBS control point: weight + position (OdBmWPoint —
@@ -76,12 +98,19 @@ type Line struct {
 
 // Arc is a circular arc (OdBmGArc: XDirection, YDirection, Radius, Center,
 // IsFilled).
+//
+// StartAngle/EndAngle are the curve parameters (radians, in the X/Y plane
+// basis) from the GCurve EndParams when they decode; both 0 (or equal)
+// means the angular span is unknown and consumers should treat the arc as
+// a full circle.
 type Arc struct {
-	Center Point3
-	XDir   Point3
-	YDir   Point3
-	Radius float64
-	Filled bool
+	Center     Point3
+	XDir       Point3
+	YDir       Point3
+	Radius     float64
+	Filled     bool
+	StartAngle float64
+	EndAngle   float64
 }
 
 // Ellipse is an ellipse (OdBmGEllipse: Center, XDirection, YDirection,

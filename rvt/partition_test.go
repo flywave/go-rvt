@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"encoding/binary"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -263,15 +264,19 @@ func TestM3Partitions(t *testing.T) {
 			if pi.VerifiedPages+pi.StaleIndexPages < 700 {
 				t.Errorf("%s: partition %s verified %d + stale %d pages", path, pi.Name, pi.VerifiedPages, pi.StaleIndexPages)
 			}
-			if pi.StaleIndexPages == 0 {
-				t.Errorf("%s: partition %s expected stale-index recoveries (R29/R40)", path, pi.Name)
+			// Checksum-page strip (cross-validated vs rvt-rs, 2026-10):
+			// every page of the named partitions verifies cleanly; the
+			// "stale-index recoveries" (R29/R40) and "damaged pages"
+			// (R21) of the pre-strip decoder were a misdecode of the
+			// 353-byte page checksum trailers.
+			if pi.StaleIndexPages != 0 {
+				t.Errorf("%s: partition %s unexpected stale-index pages %d", path, pi.Name, pi.StaleIndexPages)
 			}
 			if pi.LogicalBytes < 50_000_000 {
 				t.Errorf("%s: partition %s logical %d", path, pi.Name, pi.LogicalBytes)
 			}
-			// Both official samples carry known local corruption (R21).
-			if pi.CorruptDataPages+pi.UnreadablePages == 0 {
-				t.Errorf("%s: partition %s expected damaged pages (R21)", path, pi.Name)
+			if pi.CorruptDataPages+pi.UnreadablePages != 0 {
+				t.Errorf("%s: partition %s damaged pages %d+%d", path, pi.Name, pi.CorruptDataPages, pi.UnreadablePages)
 			}
 			if pi.SignatureRecords < 100 || pi.SignatureText != sigText {
 				t.Errorf("%s: partition %s signatures %d %q", path, pi.Name, pi.SignatureRecords, pi.SignatureText)
@@ -321,5 +326,47 @@ func TestM3Partitions(t *testing.T) {
 	}
 	if found == 0 {
 		t.Skip("no .rvt samples on this machine")
+	}
+}
+
+// TestPartitionInflatedSize locks the page-stripped inflated partition
+// sizes. These constants were cross-validated byte-for-byte against the
+// rvt-rs reference implementation (October 2026) on all three regression
+// samples; a decode regression that changes them is a container-layer
+// break.
+func TestPartitionInflatedSize(t *testing.T) {
+	want := map[string]struct {
+		stream string
+		size   int
+	}{
+		"rac_basic_2023.rvt":    {"13", 94444789},
+		"rst_advanced_2022.rvt": {"8", 75834804},
+		"rac_advanced_2017.rvt": {"3", 75709074},
+	}
+	for _, path := range samples {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		base := filepath.Base(path)
+		w, ok := want[base]
+		if !ok {
+			continue
+		}
+		f, err := OpenCFB(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		stored, err := f.Stream("Partitions/" + w.stream)
+		if err != nil {
+			t.Fatal(err)
+		}
+		p, err := ReadPartition(w.stream, stored)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p.Info.LogicalBytes != w.size {
+			t.Errorf("%s: inflated %d, want %d (rvt-rs cross-validated)", base, p.Info.LogicalBytes, w.size)
+		}
 	}
 }

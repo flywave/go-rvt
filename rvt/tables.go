@@ -43,9 +43,13 @@ func isTableStream(path string) bool {
 }
 
 // decompressTable splits a table stream into header + gzip member + trailer.
+// Checksum-paged streams are page-stripped first (see stripPageChecksums).
 // On failure it still returns a TableInfo with Error populated so callers
 // can report per-stream problems (e.g. a locally corrupted sample).
 func decompressTable(path string, stream []byte) (*TableInfo, []byte, error) {
+	if isChecksumPagedStream(path) {
+		stream = stripPageChecksums(stream)
+	}
 	idx := bytes.Index(stream, []byte{0x1f, 0x8b, 0x08})
 	if idx < 0 {
 		info := &TableInfo{Path: path, HeaderHex: fmt.Sprintf("%x", stream)}
